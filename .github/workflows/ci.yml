@@ -19,13 +19,19 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
-      - name: Run on the example
+      # every example and model: its report and its web page
+      - name: Run on the examples and models
         run: |
           mkdir -p out
-          ./build/mesh-verify examples/sphere_through_torus.obj | tee out/report.txt || test ${PIPESTATUS[0]} -eq 1
-          ./build/mesh-verifier-web examples/sphere_through_torus.obj -o out/sphere_through_torus.html
-      # the report and the web page, as a download on the run's page
+          for f in examples/*.obj models/*.obj; do
+            [ -e "$f" ] || continue
+            name=$(basename "$f" .obj)
+            ./build/mesh-verify "$f" > "out/$name.txt" || test $? -eq 1
+            echo "$f: $(tail -n 1 "out/$name.txt")"
+            ./build/mesh-verifier-web "$f" -o "out/$name.html"
+          done
+      # kept as a download on the run's page
       - uses: actions/upload-artifact@v4
         with:
-          name: example
+          name: results
           path: out
