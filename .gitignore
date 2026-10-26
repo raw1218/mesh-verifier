@@ -1,0 +1,4 @@
+build/
+site/
+*.html
+!docs/**/*.html
