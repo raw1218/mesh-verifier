@@ -59,7 +59,7 @@ const json& ArrayMember(const json& root, const std::string& key) {
     const json* v = Find(root, key);
     if (!v) return kEmpty;
     if (!v->is_array()) Fail("'" + key + "' must be an array");
-    return v;
+    return *v;
 }
 
 std::vector<double> Numbers(const json& v, size_t count, const std::string& where) {
