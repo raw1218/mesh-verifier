@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Controls",
+  "description": "Output of GET /api/controls: the rig's controls, in order, with their current values. Empty without a rig.",
+  "type": "object",
+  "properties": {
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "min": {"type": "number"},
+          "max": {"type": "number"},
+          "default": {"type": "number"},
+          "value": {"type": "number"}
+        },
+        "required": ["name", "min", "max", "default", "value"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["controls"],
+  "additionalProperties": false
+}

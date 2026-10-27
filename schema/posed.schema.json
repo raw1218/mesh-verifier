@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Posed",
+  "description": "Output of POST /api/controls: every source mesh's new vertex positions (in the scene's mesh order, the same counts as before) and the new state.",
+  "type": "object",
+  "properties": {
+    "meshes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "positions": {"type": "array", "items": {"type": "number"}, "description": "x, y, z per vertex."}
+        },
+        "required": ["positions"],
+        "additionalProperties": false
+      }
+    },
+    "state": {"$ref": "state.schema.json"}
+  },
+  "required": ["meshes", "state"],
+  "additionalProperties": false
+}

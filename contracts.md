@@ -77,6 +77,9 @@ are the definitive form; the examples here illustrate them.
 | `GET /api/state`, and every `POST` that changes the scene | `state.schema.json` |
 | `GET /api/scene`, `POST /api/load` | `scene.schema.json` |
 | `POST /api/reset` body | `reset.schema.json` |
+| `GET /api/controls` | `controls.schema.json` |
+| `POST /api/controls` body, and its result | `pose.schema.json`, `posed.schema.json` |
+| A rig file, and the `mesh-rig --json` report | `rig.schema.json`, `rig-report.schema.json` |
 | Every API error | `error.schema.json` |
 
 A document read (the transforms file, a request body) that doesn't match its schema is an error: nothing is applied,
@@ -98,6 +101,12 @@ Blender add-on) uses the same API. Request and response bodies are JSON.
 | `POST /api/reset` | `{"node": i, "subtree": bool}`, or `{}` for every component | the state |
 | `POST /api/undo`, `POST /api/redo` | | the state |
 | `POST /api/load?format=obj\|glb&name=<file name>[&up=y\|z]` | the model file's bytes | the scene |
+| `GET /api/controls` | | the rig's controls with their ranges and current values (none without a rig) |
+| `POST /api/controls` | `{"values": {"brow_raise_L": 0.5}}` | every mesh's new vertex positions and the state |
+
+With `--rig <rig.json>` (and a skinned GLB), `mesh-verify` poses the model with the rig: the scene is the model at
+the rig's default controls, one component per part, and `POST /api/controls` poses it again. Loading another model
+drops the rig.
 
 - An edit is one entry of a transforms file: `{"node": 2, "space": "world", "translation": [0, 0, 0]}`. A transforms
   document is applied all or nothing.

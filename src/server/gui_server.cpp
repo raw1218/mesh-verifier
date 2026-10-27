@@ -1,5 +1,6 @@
 #include "mesh_verifier/gui_server.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
@@ -129,7 +130,22 @@ std::filesystem::path FindThreeJs() {
     return {};
 }
 
-GuiApp::GuiApp(Scene scene, std::filesystem::path threeDir) : scene_(std::move(scene)), threeDir_(std::move(threeDir)) { Reverify(); }
+GuiApp::GuiApp(Scene scene, std::filesystem::path threeDir, std::shared_ptr<const PoseSource> rig)
+    : scene_(std::move(scene)), threeDir_(std::move(threeDir)), rig_(std::move(rig)) {
+    if (rig_)
+        for (const PoseSource::ControlInfo& c : rig_->Controls()) controls_.push_back(c.defaultValue);
+    Reverify();
+}
+
+json GuiApp::ControlsJson() const {
+    json list = json::array();
+    if (rig_) {
+        const auto controls = rig_->Controls();
+        for (size_t i = 0; i < controls.size(); ++i)
+            list.push_back({{"name", controls[i].name}, {"min", controls[i].min}, {"max", controls[i].max}, {"default", controls[i].defaultValue}, {"value", controls_[i]}});
+    }
+    return {{"controls", list}};
+}
 
 void GuiApp::Reverify() {
     report_ = VerifyScene(scene_);
@@ -233,6 +249,7 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         if (path == "/api/state") return Json(StateJson());
         if (path == "/api/view") return Json(ViewJson(BuildView(scene_, report_, revision_)));
         if (path == "/api/intersections") return Json(IntersectionsJson(scene_, report_));
+        if (path == "/api/controls") return Json(ControlsJson());
         return Error("unknown endpoint " + path, 404);
     }
     if (method != "POST") return Error("method not allowed", 405);
@@ -249,6 +266,8 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         Scene loaded = ParseScene(body, *format, stem.empty() ? "model" : stem);  // (throws, keeping the scene)
         loaded.SetUp(*up);
         scene_ = std::move(loaded);
+        rig_.reset();  // (the rig was for the old model)
+        controls_.clear();
         undo_.clear();
         redo_.clear();
         lastGroup_.clear();
@@ -272,6 +291,39 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         Remember(std::move(before), group == query.end() ? "" : group->second);
         Reverify();
         return Json(StateJson());
+    }
+    if (path == "/api/controls") {
+        if (!rig_) return Error("this model has no rig");
+        const json request = ReadBody(body, Schema::Pose);
+        const auto controls = rig_->Controls();
+        std::vector<double> values = controls_;
+        for (const auto& [name, value] : request.at("values").items()) {
+            size_t c = 0;
+            while (c < controls.size() && controls[c].name != name) ++c;
+            if (c == controls.size()) return Error("the rig has no control '" + name + "'");
+            const double x = value.get<double>();
+            if (x < controls[c].min || x > controls[c].max) return Error(name + " = " + value.dump() + " is outside " + json(controls[c].min).dump() + ".." + json(controls[c].max).dump());
+            values[c] = x;
+        }
+        std::vector<std::vector<Vec3>> posed = rig_->Pose(values);
+        if (posed.size() != scene_.Meshes().size()) return Error("the rig posed " + std::to_string(posed.size()) + " meshes, the scene has " + std::to_string(scene_.Meshes().size()), 500);
+        for (size_t m = 0; m < posed.size(); ++m)  // (counts checked first, so a bad pose changes nothing)
+            if (posed[m].size() != scene_.Meshes()[m].vertices.size() || !std::all_of(posed[m].begin(), posed[m].end(), [](const Vec3& v) { return IsFinite(v); }))
+                return Error("the rig posed mesh " + std::to_string(m) + " with the wrong number of vertices, or ones that aren't finite", 500);
+        json meshes = json::array();
+        for (size_t m = 0; m < posed.size(); ++m) {
+            json positions = json::array();
+            for (const Vec3& v : posed[m]) {
+                positions.push_back(v.x);
+                positions.push_back(v.y);
+                positions.push_back(v.z);
+            }
+            meshes.push_back({{"positions", positions}});
+            scene_.SetVertices(m, std::move(posed[m]));
+        }
+        controls_ = values;
+        Reverify();
+        return Json({{"meshes", meshes}, {"state", StateJson()}});
     }
     if (path == "/api/reset") {
         const json request = ReadBody(body, Schema::Reset);

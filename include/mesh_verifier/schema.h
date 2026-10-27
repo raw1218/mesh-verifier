@@ -18,6 +18,9 @@ enum class Schema {
     View,           // view.schema.json
     State,          // state.schema.json
     Scene,          // scene.schema.json
+    Controls,       // controls.schema.json
+    Pose,           // pose.schema.json
+    Posed,          // posed.schema.json
     Rig,            // rig.schema.json
     RigReport,      // rig-report.schema.json
     Error,          // error.schema.json (keep last)

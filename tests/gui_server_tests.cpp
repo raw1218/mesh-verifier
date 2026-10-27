@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <memory>
 
 #include <nlohmann/json.hpp>
 
@@ -108,6 +109,56 @@ TEST_CASE("every state carries the view: the engine's highlight layers") {
     // rotated, the cube crosses the other: crossing lines too
     const json turned = Body(app.Handle("POST", "/api/transform", R"({"node":2,"space":"world","rotationEuler":[0,0,30]})"), Schema::State);
     CHECK_FALSE(turned["view"]["overlays"][1]["positions"].empty());
+}
+
+namespace {
+
+// A stand-in rig: one control, "lift", raising every vertex of every mesh by its value.
+class Lift : public PoseSource {
+public:
+    explicit Lift(const Scene& scene) {
+        for (const Mesh& m : scene.Meshes()) rest_.push_back(m.vertices);
+    }
+    std::vector<ControlInfo> Controls() const override { return {{"lift", 0, 2, 0}}; }
+    std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const override {
+        std::vector<std::vector<Vec3>> out = rest_;
+        for (auto& mesh : out)
+            for (Vec3& v : mesh) v.y += values[0];
+        return out;
+    }
+
+private:
+    std::vector<std::vector<Vec3>> rest_;
+};
+
+}  // namespace
+
+TEST_CASE("with a rig, the controls pose the meshes and the result is verified again") {
+    Scene scene = LoadGLB(kFixtures / "hierarchy.glb");
+    auto rig = std::make_shared<const Lift>(scene);
+    GuiApp app(std::move(scene), {}, rig);
+    const json controls = Body(app.Handle("GET", "/api/controls", ""), Schema::Controls);
+    REQUIRE(controls["controls"].size() == 1);
+    CHECK(controls["controls"][0]["name"] == "lift");
+    CHECK(controls["controls"][0]["value"] == 0);
+
+    const double before = app.CurrentScene().Meshes()[0].vertices[0].y;
+    const json posed = Body(app.Handle("POST", "/api/controls", R"({"values": {"lift": 1.5}})"), Schema::Posed);
+    CHECK(posed["meshes"].size() == app.CurrentScene().Meshes().size());
+    CHECK(posed["meshes"][0]["positions"][1] == before + 1.5);
+    CHECK(app.CurrentScene().Meshes()[0].vertices[0].y == before + 1.5);
+    CHECK(Body(app.Handle("GET", "/api/controls", ""), Schema::Controls)["controls"][0]["value"] == 1.5);
+
+    CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {"twist": 1}})")));
+    CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {"lift": 3}})")));
+    CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {"lift": "high"}})")));
+    CHECK(app.CurrentScene().Meshes()[0].vertices[0].y == before + 1.5);  // (failed requests change nothing)
+}
+
+TEST_CASE("without a rig there are no controls") {
+    GuiApp app(LoadGLB(kFixtures / "hierarchy.glb"));
+    CHECK(Body(app.Handle("GET", "/api/controls", ""), Schema::Controls)["controls"].empty());
+    CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {}})")));
 }
 
 TEST_CASE("models can be loaded through the API") {

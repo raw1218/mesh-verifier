@@ -11,12 +11,16 @@
 //   POST /api/reset          (reset.schema.json) returns the state
 //   POST /api/undo, /api/redo                                                         returns the state
 //   POST /api/load?format=obj|glb&name=<file name>[&up=y|z]   the model file as the body; returns the scene
+//   GET  /api/controls       the rig's controls and their values; none without a rig     (controls.schema.json)
+//   POST /api/controls       control values by name (pose.schema.json): poses the meshes, verifies again; returns
+//                            the new mesh positions and the state                        (posed.schema.json)
 // Errors are HTTP 4xx with {"error": "..."} (error.schema.json).
 #pragma once
 
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -34,12 +38,27 @@ struct HttpResponse {
     std::string body;
 };
 
+// Something that poses the scene's meshes from named control values: a rig. (The GUI knows nothing about rigs; the
+// rig library provides one of these.) Pose returns new vertex positions for every source mesh of the scene, in the
+// scene's mesh order, the counts unchanged.
+class PoseSource {
+public:
+    struct ControlInfo {
+        std::string name;
+        double min = 0, max = 1, defaultValue = 0;
+    };
+    virtual ~PoseSource() = default;
+    virtual std::vector<ControlInfo> Controls() const = 0;
+    virtual std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const = 0;
+};
+
 // The engine's state and its HTTP API, independent of any socket (so it can be driven directly, e.g. in tests).
 class GuiApp {
 public:
     // `threeDir`: a local three.js package (the directory with build/ and examples/) to serve the page's scripts
-    // from; if empty, the page loads three.js from a CDN.
-    GuiApp(Scene scene, std::filesystem::path threeDir = {});
+    // from; if empty, the page loads three.js from a CDN. `rig`: optional; with one, the controls endpoints pose the
+    // scene's meshes (and loading another model drops it).
+    GuiApp(Scene scene, std::filesystem::path threeDir = {}, std::shared_ptr<const PoseSource> rig = nullptr);
 
     // Handles one request; `target` is the path with an optional query string. Thread-safe.
     HttpResponse Handle(const std::string& method, const std::string& target, const std::string& body);
@@ -63,6 +82,10 @@ private:
     uint64_t revision_ = 0;
     std::vector<std::vector<NodeTransform>> undo_, redo_;
     std::string lastGroup_;
+    std::shared_ptr<const PoseSource> rig_;
+    std::vector<double> controls_;  // the rig's current control values
+
+    nlohmann::json ControlsJson() const;
 };
 
 // A local three.js package to serve: $MESH_VERIFIER_THREE_DIR, the one found at build time, or a global npm

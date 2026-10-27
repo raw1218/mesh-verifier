@@ -41,6 +41,9 @@ set(MESH_VERIFIER_SCHEMAS
     schema/view.schema.json
     schema/state.schema.json
     schema/scene.schema.json
+    schema/controls.schema.json
+    schema/pose.schema.json
+    schema/posed.schema.json
     schema/rig.schema.json
     schema/rig-report.schema.json
     schema/error.schema.json)
@@ -97,7 +100,7 @@ if(MESH_VERIFIER_BUILD_TOOLS)
     add_executable(mesh-rig tools/mesh_rig.cpp)
     target_link_libraries(mesh-rig PRIVATE mesh_rig)
     add_executable(mesh-verify tools/mesh_verify.cpp)
-    target_link_libraries(mesh-verify PRIVATE mesh_verifier)
+    target_link_libraries(mesh-verify PRIVATE mesh_verifier mesh_rig)
     add_executable(mesh-verifier-web tools/mesh_verifier_web.cpp)
     target_link_libraries(mesh-verifier-web PRIVATE mesh_verifier)
 endif()

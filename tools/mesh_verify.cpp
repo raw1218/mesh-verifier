@@ -1,15 +1,20 @@
-// mesh-verify --format <obj|glb> <model> [--headless] [--port <port>] [--transforms <file>] [--json]
+// mesh-verify --format <obj|glb> <model> [--headless] [--port <port>] [--transforms <file>] [--rig <rig.json>] [--json]
 //
 // Loads a model as a scene of components, applies the optional component edits, and checks it for intersecting
 // triangles. With --headless it prints the result and exits; otherwise it serves the interactive GUI on
 // http://127.0.0.1:<port>/ (default 8080). --json prints the result in the contract's JSON form (contracts.md).
+// With --rig (a skinned GLB and its rig file, see mesh_rig.h): the model posed by the rig at its default controls,
+// one component per part; the GUI shows a slider per control and poses the model as they move.
 // Exit code: 0 when verification completed (with or without intersections), 1 for any error (on stderr).
 #include <charconv>
 #include <cstdio>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 
+#include "mesh_rig/rig.h"
+#include "mesh_verifier/gltf_importer.h"
 #include "mesh_verifier/gui_server.h"
 #include "mesh_verifier/scene.h"
 #include "mesh_verifier/scene_io.h"
@@ -19,7 +24,7 @@ using namespace mesh_verifier;
 namespace {
 
 constexpr const char* kUsage =
-    "usage: mesh-verify --format <obj|glb> <model file> [--headless] [--port <port>] [--transforms <file>] [--json]\n";
+    "usage: mesh-verify --format <obj|glb> <model file> [--headless] [--port <port>] [--transforms <file>] [--rig <rig.json>] [--json]\n";
 
 const char* TypeName(IntersectionType t) { return t == IntersectionType::Crossing ? "crossing" : "coplanar_overlap"; }
 
@@ -33,6 +38,7 @@ struct Arguments {
     std::optional<ModelFormat> format;
     std::string model;
     std::string transforms;
+    std::string rig;
     bool headless = false;
     bool json = false;
     int port = 8080;
@@ -61,6 +67,10 @@ std::optional<Arguments> Parse(int argc, char** argv) {
                 std::cerr << "error: unknown format '" << *v << "' (use obj or glb)\n";
                 return std::nullopt;
             }
+        } else if (arg == "--rig") {
+            const auto v = value("--rig");
+            if (!v) return std::nullopt;
+            a.rig = *v;
         } else if (arg == "--transforms") {
             const auto v = value("--transforms");
             if (!v) return std::nullopt;
@@ -88,6 +98,10 @@ std::optional<Arguments> Parse(int argc, char** argv) {
         std::cerr << "error: no model file given\n";
         return std::nullopt;
     }
+    if (!a.rig.empty() && a.format != ModelFormat::Glb) {
+        std::cerr << "error: --rig needs a skinned GLB model (--format glb)\n";
+        return std::nullopt;
+    }
     if (portText && !a.headless) {  // (ignored in headless mode)
         int port = -1;
         const auto [ptr, ec] = std::from_chars(portText->data(), portText->data() + portText->size(), port);
@@ -111,6 +125,48 @@ void PrintReport(const Scene& scene, const VerificationReport& report) {
               << report.intersections.size() << " intersecting pair" << (report.intersections.size() == 1 ? "" : "s") << "\n";
 }
 
+// A rig as the GUI's pose source: control values to the posed parts' vertices (one mesh per part, as RigScene makes).
+class RigPose : public PoseSource {
+public:
+    RigPose(SkinnedModel model, mesh_rig::RigFile file) : model_(std::move(model)), rig_(std::move(file), model_) {}
+
+    std::vector<ControlInfo> Controls() const override {
+        std::vector<ControlInfo> out;
+        for (const mesh_rig::Control& c : rig_.Definition().controls) out.push_back({c.name, c.min, c.max, c.defaultValue});
+        return out;
+    }
+
+    std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const override {
+        GeometryData posed = Posed(values);
+        std::vector<std::vector<Vec3>> out;
+        for (Mesh& m : posed.meshes) out.push_back(std::move(m.vertices));
+        return out;
+    }
+
+    GeometryData Posed(const std::vector<double>& values) const {
+        mesh_rig::DeformerFrame frame;
+        rig_.Evaluate(values, frame);
+        return Deform(model_, mesh_rig::PoseFromFrame(model_, rig_.Definition(), frame));
+    }
+
+    // The model at the rig's default controls, as a scene: one root component per part.
+    Scene RigScene() const {
+        GeometryData posed = Posed(mesh_rig::DefaultControls(rig_.Definition()));
+        std::vector<SceneNode> nodes;
+        for (size_t i = 0; i < posed.meshes.size(); ++i) {
+            SceneNode n;
+            n.name = posed.meshes[i].name;
+            n.mesh = static_cast<int>(i);
+            nodes.push_back(n);
+        }
+        return Scene(model_.name, std::move(posed.meshes), std::move(nodes));
+    }
+
+private:
+    SkinnedModel model_;
+    mesh_rig::OurRigEvaluator rig_;
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -125,7 +181,9 @@ int main(int argc, char** argv) {
         return 1;
     }
     try {
-        Scene scene = LoadScene(args->model, *args->format);
+        std::shared_ptr<const RigPose> rig;
+        if (!args->rig.empty()) rig = std::make_shared<const RigPose>(LoadSkinnedGLB(args->model), mesh_rig::LoadRigFile(args->rig));
+        Scene scene = rig ? rig->RigScene() : LoadScene(args->model, *args->format);
         if (!args->transforms.empty()) scene.Apply(LoadTransformEdits(args->transforms));  // (all or nothing)
         if (args->headless || args->json) {
             const VerificationReport report = VerifyScene(scene);
@@ -134,7 +192,7 @@ int main(int argc, char** argv) {
             std::cout.flush();
             if (args->headless) return 0;
         }
-        GuiApp app(std::move(scene), FindThreeJs());
+        GuiApp app(std::move(scene), FindThreeJs(), rig);
         GuiServerOptions options;
         options.port = args->port;
         options.onReady = [](const std::string& url) { std::cout << url << std::endl; };

@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pose request",
+  "description": "Request body of POST /api/controls: new values for some of the rig's controls, by name; the others keep theirs. Each must be within its control's range.",
+  "type": "object",
+  "properties": {
+    "values": {"type": "object", "additionalProperties": {"type": "number"}}
+  },
+  "required": ["values"],
+  "additionalProperties": false
+}

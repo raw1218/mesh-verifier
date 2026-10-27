@@ -90,6 +90,9 @@ public:
     // under a parent that collapses space), none is applied and SceneError is thrown.
     void Apply(const std::vector<TransformEdit>& edits);
     void Apply(const TransformEdit& edit) { Apply(std::vector<TransformEdit>{edit}); }
+    // Replaces a source mesh's vertex positions (same count, all finite): a deformed shape, such as a rig's pose. The
+    // triangles and every transform stay as they are. Throws SceneError, changing nothing, otherwise.
+    void SetVertices(size_t mesh, std::vector<Vec3> vertices);
     // Replaces a node's whole local transform.
     void SetLocalTransform(size_t i, const NodeTransform& transform);
 

@@ -24,6 +24,15 @@ NodeTransform FromMatrix(const Mat4& m) {
 
 }  // namespace
 
+void Scene::SetVertices(size_t mesh, std::vector<Vec3> vertices) {
+    if (mesh >= meshes_.size()) throw SceneError("mesh " + std::to_string(mesh) + " doesn't exist");
+    if (vertices.size() != meshes_[mesh].vertices.size())
+        throw SceneError("mesh " + std::to_string(mesh) + " has " + std::to_string(meshes_[mesh].vertices.size()) + " vertices, given " + std::to_string(vertices.size()));
+    for (const Vec3& v : vertices)
+        if (!IsFinite(v)) throw SceneError("mesh " + std::to_string(mesh) + ": a vertex is not finite");
+    meshes_[mesh].vertices = std::move(vertices);
+}
+
 Scene::Scene(std::string name, std::vector<Mesh> meshes, std::vector<SceneNode> nodes)
     : name_(std::move(name)), meshes_(std::move(meshes)), nodes_(std::move(nodes)) {
     const int n = static_cast<int>(nodes_.size());

@@ -93,7 +93,7 @@
     <div id="hint">Click: select &middot; drag: orbit &middot; right-drag: pan &middot; wheel: zoom &middot; W/E/R: move/rotate/scale &middot; Q: local/world &middot; F: frame &middot; Esc: deselect &middot; Ctrl+Z: undo</div>
     <div id="drop">Drop an OBJ or GLB file to load it</div>
   </main>
-  <aside id="props"><h3>Transform</h3><div id="propsBody"></div></aside>
+  <aside id="props"><div id="rig" hidden><h3>Rig controls</h3><div id="controls"></div></div><h3>Transform</h3><div id="propsBody"></div></aside>
   <footer><span id="stats"></span><span id="msg"></span></footer>
 </div>
 <script type="importmap">
@@ -168,7 +168,17 @@ const fail = e => message(e.message || String(e), true);
 // ---------- building the scene ----------
 function disposeTree(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
 
+// a source mesh as one position per triangle corner (flat shading, per-triangle picking)
+function cornerPositions(src) {
+  const tri = src.triangles, pos = src.positions, p = new Float32Array(tri.length * 3);
+  for (let k = 0; k < tri.length; k++) { p[3 * k] = pos[3 * tri[k]]; p[3 * k + 1] = pos[3 * tri[k] + 1]; p[3 * k + 2] = pos[3 * tri[k] + 2]; }
+  return p;
+}
+
+let sourceMeshes = [];   // the scene's source meshes (positions change when a rig poses them)
+
 function buildScene(data) {
+  sourceMeshes = data.meshes;
   gizmo.detach();
   disposeTree(root); root.clear();
   delete $("propsBody").dataset.node;
@@ -180,12 +190,8 @@ function buildScene(data) {
     obj.name = c.name; obj.userData.node = i; obj.visible = c.inScene;
     objects.push(obj); meshes.push(null);
     if (c.mesh >= 0) {
-      const src = data.meshes[c.mesh];
-      const tri = src.triangles, pos = src.positions;
-      const p = new Float32Array(tri.length * 3);
-      for (let k = 0; k < tri.length; k++) { p[3 * k] = pos[3 * tri[k]]; p[3 * k + 1] = pos[3 * tri[k] + 1]; p[3 * k + 2] = pos[3 * tri[k] + 2]; }
       const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.BufferAttribute(p, 3));
+      g.setAttribute("position", new THREE.BufferAttribute(cornerPositions(data.meshes[c.mesh]), 3));
       g.computeVertexNormals();
       const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: NEUTRAL, roughness: 0.7, side: THREE.DoubleSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
       mesh.userData.node = i;
@@ -208,6 +214,48 @@ function buildScene(data) {
   updateSnap();
   frame(box);
   select(-1);
+  loadControls();
+}
+
+// ---------- rig controls: a slider per control; the engine poses the meshes ----------
+let posePending = null, poseInflight = false;
+async function loadControls() {
+  let list = [];
+  try { list = (await api("GET", "/api/controls")).controls; } catch (err) { fail(err); }
+  $("rig").hidden = !list.length;
+  const box = $("controls"); box.textContent = "";
+  for (const c of list) {
+    const row = document.createElement("div"); row.className = "field"; row.style.gridTemplateColumns = "1fr 2fr 48px";
+    const label = document.createElement("label"); label.textContent = c.name; label.title = c.name;
+    const slider = document.createElement("input"); slider.type = "range"; slider.min = c.min; slider.max = c.max; slider.step = (c.max - c.min) / 200; slider.value = c.value;
+    slider.style.border = "none"; slider.style.padding = "0";
+    const out = document.createElement("span"); out.className = "idx"; out.textContent = fmt(c.value);
+    slider.oninput = () => { out.textContent = fmt(+slider.value); queuePose({ [c.name]: +slider.value }); };
+    slider.ondblclick = () => { slider.value = c.default; slider.oninput(); };
+    slider.title = "double-click: back to the default";
+    row.append(label, slider, out);
+    box.append(row);
+  }
+}
+function queuePose(values) { posePending = { ...(posePending || {}), ...values }; if (!poseInflight) sendPose(); }
+async function sendPose() {
+  poseInflight = true;
+  const values = posePending; posePending = null;
+  try {
+    const r = await api("POST", "/api/controls", { values });
+    r.meshes.forEach((m, k) => { sourceMeshes[k].positions = m.positions; });
+    comps.forEach((c, i) => {
+      if (c.mesh < 0 || !meshes[i]) return;
+      const g = meshes[i].geometry;
+      g.setAttribute("position", new THREE.BufferAttribute(cornerPositions(sourceMeshes[c.mesh]), 3));
+      g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox();
+      const wire = objects[i].children.find(o => o.userData.wire);
+      if (wire) { wire.geometry.dispose(); wire.geometry = new THREE.WireframeGeometry(g); }
+    });
+    applyState(r.state);
+  } catch (err) { fail(err); }
+  poseInflight = false;
+  if (posePending) sendPose();
 }
 
 function sceneBox() {
