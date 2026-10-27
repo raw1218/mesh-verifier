@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "mesh_verifier"
+version = "0.1.0"
+name = "Mesh Verifier"
+tagline = "Finds intersecting triangles and draws them in the viewport"
+maintainer = "raw1218"
+type = "add-on"
+website = "https://github.com/raw1218/mesh-verifier"
+tags = ["Mesh"]
+blender_version_min = "4.2.0"
+license = ["SPDX:MIT"]
+
+[permissions]
+files = "Writes a temporary file and runs the bundled mesh-verify program"
+network = "Talks to mesh-verify on localhost"

@@ -3,3 +3,5 @@ site/
 *.html
 !docs/**/*.html
 !src/server/*.html
+blender/mesh_verifier/bin/
+__pycache__/
