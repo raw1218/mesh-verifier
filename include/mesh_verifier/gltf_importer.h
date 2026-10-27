@@ -1,5 +1,5 @@
-// Layer 1: geometry import: glTF 2.0 binary (GLB). Only the geometry and the node hierarchy are read; materials,
-// textures, animations, skins and cameras are ignored.
+// Layer 1: geometry import: glTF 2.0 binary (GLB). The geometry and the node hierarchy, and (LoadSkinnedGLB) skins
+// and morph targets; materials, textures, animations and cameras are ignored.
 #pragma once
 
 #include <filesystem>
@@ -7,6 +7,7 @@
 #include <string>
 
 #include "mesh_verifier/scene.h"
+#include "mesh_verifier/skinned_model.h"
 
 namespace mesh_verifier {
 
@@ -32,5 +33,11 @@ Scene LoadGLB(const std::filesystem::path& path);
 
 // The same, from the file's bytes in memory. External buffer files are looked up in `baseDir` (none if empty).
 Scene ParseGLB(const std::string& bytes, const std::string& name = "model", const std::filesystem::path& baseDir = {});
+
+// The file as a skinned model (skinned_model.h): the same nodes (same indices, names, hierarchy and rest
+// transforms) and each displayed node with a mesh as a part, with its skin and its morph targets, named by the
+// mesh's extras.targetNames (as Blender writes them). A node transform with shear is an error.
+SkinnedModel LoadSkinnedGLB(const std::filesystem::path& path);
+SkinnedModel ParseSkinnedGLB(const std::string& bytes, const std::string& name = "model", const std::filesystem::path& baseDir = {});
 
 }  // namespace mesh_verifier

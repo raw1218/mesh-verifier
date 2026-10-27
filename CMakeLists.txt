@@ -41,6 +41,8 @@ set(MESH_VERIFIER_SCHEMAS
     schema/view.schema.json
     schema/state.schema.json
     schema/scene.schema.json
+    schema/rig.schema.json
+    schema/rig-report.schema.json
     schema/error.schema.json)
 mv_embed(${CMAKE_CURRENT_BINARY_DIR}/generated/schema_files.cpp SchemaFiles ${MESH_VERIFIER_SCHEMAS})
 mv_embed(${CMAKE_CURRENT_BINARY_DIR}/generated/page_files.cpp PageFiles src/server/gui_page.html)
@@ -54,6 +56,7 @@ add_library(mesh_verifier
     src/scene/transform.cpp
     src/scene/scene.cpp
     src/scene/scene_io.cpp
+    src/scene/skinned_model.cpp
     src/import/obj_importer.cpp
     src/import/gltf_importer.cpp
     src/verification/predicates.cpp
@@ -79,7 +82,20 @@ elseif(MSVC)
     target_compile_options(mesh_verifier PRIVATE /W4 /fp:precise /utf-8 /bigobj)
 endif()
 
+# The rig library: rig files and evaluators (controls in; joint transforms, morph weights and curves out). Built on
+# the verifier library's skinned models, which it poses.
+add_library(mesh_rig src/rig/rig.cpp)
+target_include_directories(mesh_rig PUBLIC include)
+target_link_libraries(mesh_rig PUBLIC mesh_verifier)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(mesh_rig PRIVATE -Wall -Wextra -Wpedantic)
+elseif(MSVC)
+    target_compile_options(mesh_rig PRIVATE /W4 /utf-8)
+endif()
+
 if(MESH_VERIFIER_BUILD_TOOLS)
+    add_executable(mesh-rig tools/mesh_rig.cpp)
+    target_link_libraries(mesh-rig PRIVATE mesh_rig)
     add_executable(mesh-verify tools/mesh_verify.cpp)
     target_link_libraries(mesh-verify PRIVATE mesh_verifier)
     add_executable(mesh-verifier-web tools/mesh_verifier_web.cpp)
@@ -104,9 +120,12 @@ if(MESH_VERIFIER_BUILD_TESTS)
         tests/gltf_importer_tests.cpp
         tests/schema_tests.cpp
         tests/view_tests.cpp
-        tests/gui_server_tests.cpp)
-    target_link_libraries(mesh_verifier_tests PRIVATE mesh_verifier Catch2::Catch2WithMain)
-    target_compile_definitions(mesh_verifier_tests PRIVATE FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+        tests/gui_server_tests.cpp
+        tests/skinned_model_tests.cpp
+        tests/rig_tests.cpp)
+    target_link_libraries(mesh_verifier_tests PRIVATE mesh_verifier mesh_rig Catch2::Catch2WithMain)
+    target_compile_definitions(mesh_verifier_tests PRIVATE FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+                                                           EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
     if(MSVC)
         target_compile_options(mesh_verifier_tests PRIVATE /utf-8 /bigobj)
     endif()

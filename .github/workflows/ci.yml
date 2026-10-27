@@ -35,6 +35,9 @@ jobs:
             echo "$f: $(tail -n 1 "out/$name.txt")"
             ./build/mesh-verifier-web "$f" -o "out/$name.html"
           done
+      - name: Sweep the circle character's rig
+        if: runner.os == 'Linux'
+        run: ./build/mesh-rig examples/rig/circle/circle.glb examples/rig/circle/circle.rig.json --sweep 5
       # kept as downloads on the run's page
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
@@ -46,5 +49,7 @@ jobs:
           name: mesh-verify-${{ runner.os }}
           path: |
             build/mesh-verify
+            build/mesh-rig
             build/Release/mesh-verify.exe
+            build/Release/mesh-rig.exe
           if-no-files-found: ignore

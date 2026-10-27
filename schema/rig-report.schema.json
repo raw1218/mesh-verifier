@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rig report",
+  "description": "Output of mesh-rig --json: each pose checked, with its control values and the parts that intersect in it.",
+  "type": "object",
+  "properties": {
+    "rig": {"type": "string"},
+    "model": {"type": "string"},
+    "poses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "controls": {"type": "object", "additionalProperties": {"type": "number"}, "description": "Every control's value."},
+          "intersections": {"type": "integer", "minimum": 0, "description": "Intersecting triangle pairs."},
+          "partPairs": {
+            "description": "Pairs of parts with intersecting triangles between them (a part with itself for its own), ordered by a, then b.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "a": {"type": "string"},
+                "b": {"type": "string"},
+                "pairs": {"type": "integer", "minimum": 1}
+              },
+              "required": ["a", "b", "pairs"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["controls", "intersections", "partPairs"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["rig", "model", "poses"],
+  "additionalProperties": false
+}

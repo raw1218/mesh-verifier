@@ -18,7 +18,9 @@ enum class Schema {
     View,           // view.schema.json
     State,          // state.schema.json
     Scene,          // scene.schema.json
-    Error,          // error.schema.json
+    Rig,            // rig.schema.json
+    RigReport,      // rig-report.schema.json
+    Error,          // error.schema.json (keep last)
 };
 
 // Thrown when a document doesn't match its schema. The message says where in the document and what's wrong.

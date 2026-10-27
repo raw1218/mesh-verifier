@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rig",
+  "description": "A rig: animator controls turned into deformer values (joint transforms, morph target weights, curves), in stages like MetaHuman's RigLogic. Controls are clamped to their range; each value maps a control through a piecewise-linear curve; each combination is the product of earlier values; each output adds weight * value (or the given offsets times the value) to its target. Every name a value, combination or output refers to must be defined (controls, then values, then combinations, in order), and every joint and morph must exist in the model.",
+  "type": "object",
+  "definitions": {
+    "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"}
+  },
+  "properties": {
+    "name": {"type": "string"},
+    "controls": {
+      "description": "What an animator sets.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"$ref": "#/definitions/name"},
+          "min": {"type": "number"},
+          "max": {"type": "number"},
+          "default": {"type": "number", "description": "0 when absent (or min, if 0 is out of range)."}
+        },
+        "required": ["name", "min", "max"],
+        "additionalProperties": false
+      }
+    },
+    "values": {
+      "description": "A control through a piecewise-linear curve: [[input, output], ...] with increasing inputs; constant beyond the ends.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"$ref": "#/definitions/name"},
+          "control": {"$ref": "#/definitions/name"},
+          "map": {
+            "type": "array", "minItems": 2,
+            "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+          }
+        },
+        "required": ["name", "control", "map"],
+        "additionalProperties": false
+      }
+    },
+    "combinations": {
+      "description": "The product of two or more earlier values (correctives: shapes that fire only together).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"$ref": "#/definitions/name"},
+          "of": {"type": "array", "items": {"$ref": "#/definitions/name"}, "minItems": 2}
+        },
+        "required": ["name", "of"],
+        "additionalProperties": false
+      }
+    },
+    "joints": {
+      "description": "Joint offsets per unit of a value, added to the joint's rest transform: translation in the joint's parent space, rotationEuler (degrees, X then Y then Z) after the rest rotation, scale added to the rest scale.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "joint": {"type": "string"},
+          "from": {"$ref": "#/definitions/name"},
+          "translation": {"$ref": "common.schema.json#/definitions/vec3"},
+          "rotationEuler": {"$ref": "common.schema.json#/definitions/vec3"},
+          "scale": {"$ref": "common.schema.json#/definitions/vec3"}
+        },
+        "required": ["joint", "from"],
+        "additionalProperties": false
+      }
+    },
+    "morphs": {
+      "description": "A morph target's weight: the sum of weight * value over its entries.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "morph": {"type": "string"},
+          "from": {"$ref": "#/definitions/name"},
+          "weight": {"type": "number", "default": 1}
+        },
+        "required": ["morph", "from"],
+        "additionalProperties": false
+      }
+    },
+    "curves": {
+      "description": "Extra named outputs (for example wrinkle-map masks): the sum of weight * value over its entries.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "curve": {"$ref": "#/definitions/name"},
+          "from": {"$ref": "#/definitions/name"},
+          "weight": {"type": "number", "default": 1}
+        },
+        "required": ["curve", "from"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["name", "controls"],
+  "additionalProperties": false
+}

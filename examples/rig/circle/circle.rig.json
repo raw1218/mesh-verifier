@@ -1,0 +1,39 @@
+{
+  "name": "circle",
+  "controls": [
+    {"name": "brow_raise_L", "min": -1, "max": 1},
+    {"name": "brow_raise_R", "min": -1, "max": 1},
+    {"name": "brows_angry", "min": 0, "max": 1},
+    {"name": "squash_stretch", "min": -1, "max": 1}
+  ],
+  "values": [
+    {"name": "brow_up_L", "control": "brow_raise_L", "map": [[0, 0], [1, 1]]},
+    {"name": "brow_down_L", "control": "brow_raise_L", "map": [[-1, 1], [0, 0]]},
+    {"name": "brow_up_R", "control": "brow_raise_R", "map": [[0, 0], [1, 1]]},
+    {"name": "brow_down_R", "control": "brow_raise_R", "map": [[-1, 1], [0, 0]]},
+    {"name": "squash", "control": "squash_stretch", "map": [[-1, 1], [0, 0]]},
+    {"name": "stretch", "control": "squash_stretch", "map": [[0, 0], [1, 1]]}
+  ],
+  "joints": [
+    {"joint": "brow_L", "from": "brow_up_L", "translation": [0, 0.12, -0.02]},
+    {"joint": "brow_L", "from": "brow_down_L", "translation": [0, -0.08, 0.01]},
+    {"joint": "brow_R", "from": "brow_up_R", "translation": [0, 0.12, -0.02]},
+    {"joint": "brow_R", "from": "brow_down_R", "translation": [0, -0.08, 0.01]},
+
+    {"joint": "brow_L", "from": "brows_angry", "rotationEuler": [0, 0, 15], "translation": [0, -0.03, 0]},
+    {"joint": "brow_R", "from": "brows_angry", "rotationEuler": [0, 0, -15], "translation": [0, -0.03, 0]},
+
+    {"joint": "brow_L", "from": "squash", "translation": [0.0525, -0.1125, 0.0745]},
+    {"joint": "brow_R", "from": "squash", "translation": [-0.0525, -0.1125, 0.0745]},
+    {"joint": "brow_L", "from": "stretch", "translation": [-0.042, 0.1125, -0.0596]},
+    {"joint": "brow_R", "from": "stretch", "translation": [0.042, 0.1125, -0.0596]}
+  ],
+  "morphs": [
+    {"morph": "squash", "from": "squash"},
+    {"morph": "stretch", "from": "stretch"}
+  ],
+  "curves": [
+    {"curve": "wrinkle_brow_L", "from": "brow_up_L"},
+    {"curve": "wrinkle_brow_R", "from": "brow_up_R"}
+  ]
+}

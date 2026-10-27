@@ -153,7 +153,140 @@ public:
         }
     }
 
+    // The same file as a skinned model: the node hierarchy, and every displayed node with a mesh as a part, with its
+    // skin (JOINTS_n / WEIGHTS_n and the skin's joints and inverse bind matrices) and morph targets (POSITION
+    // offsets, named by the mesh's extras.targetNames).
+    SkinnedModel BuildSkinned(const std::string& name) {
+        const Scene scene = Build(name);  // (checks the hierarchy and reads the triangles)
+        SkinnedModel model;
+        model.name = name;
+        for (size_t i = 0; i < scene.NodeCount(); ++i) {
+            const SceneNode& n = scene.Node(i);
+            if (n.local.matrix) Fail("node " + std::to_string(i) + " (" + n.name + ") has a transform with shear, which a skeleton can't pose");
+            model.nodes.push_back({n.name, n.parent, n.local.trs});
+        }
+        const json& gltfNodes = ArrayMember(root_, "nodes");
+        const json& gltfMeshes = ArrayMember(root_, "meshes");
+        for (size_t i = 0; i < scene.NodeCount(); ++i) {
+            const SceneNode& n = scene.Node(i);
+            if (n.mesh < 0 || !n.inScene) continue;
+            const std::string where = "node " + std::to_string(i) + " (" + n.name + ")";
+            SkinnedPart part;
+            part.name = n.name;
+            part.node = i;
+            const Mesh& mesh = scene.Meshes()[static_cast<size_t>(n.mesh)];
+            part.positions = mesh.vertices;
+            part.triangles = mesh.triangles;
+            part.jointSlot.assign(model.nodes.size(), UINT32_MAX);
+            ReadMorphs(gltfMeshes[static_cast<size_t>(n.mesh)], mesh.vertices.size(), model, part, where);
+            if (Find(gltfNodes[i], "skin")) ReadSkin(Index(gltfNodes[i], "skin", where), gltfMeshes[static_cast<size_t>(n.mesh)], model, part, where);
+            model.parts.push_back(std::move(part));
+        }
+        return model;
+    }
+
 private:
+    // The triangle primitives with positions, in the order ReadMesh takes their vertices.
+    std::vector<const json*> TrianglePrimitives(const json& mesh) {
+        std::vector<const json*> out;
+        for (const json& prim : Member(mesh, "primitives", "mesh")) {
+            if (Index(prim, "mode", "primitive", 4) < 4) continue;
+            if (!Find(Member(prim, "attributes", "primitive"), "POSITION")) continue;
+            out.push_back(&prim);
+        }
+        return out;
+    }
+
+    void ReadMorphs(const json& mesh, size_t vertexCount, SkinnedModel& model, SkinnedPart& part, const std::string& where) {
+        const std::vector<const json*> prims = TrianglePrimitives(mesh);
+        size_t targets = 0;
+        for (size_t p = 0; p < prims.size(); ++p) {
+            const json* t = Find(*prims[p], "targets");
+            const size_t count = t ? t->size() : 0;
+            if (p == 0) targets = count;
+            else if (count != targets) Fail(where + ": its primitives have different numbers of morph targets");
+        }
+        if (targets == 0) return;
+        std::vector<std::string> names;
+        if (const json* extras = Find(mesh, "extras"))
+            if (const json* tn = Find(*extras, "targetNames"); tn && tn->is_array())
+                for (const json& s : *tn) names.push_back(s.is_string() ? s.get<std::string>() : "");
+        for (size_t k = 0; k < targets; ++k) {
+            const std::string morph = k < names.size() && !names[k].empty() ? names[k] : "morph " + std::to_string(k);
+            int index = model.FindMorph(morph);
+            if (index < 0) {
+                model.morphNames.push_back(morph);
+                index = static_cast<int>(model.morphNames.size() - 1);
+            }
+            std::vector<Vec3> deltas;
+            for (const json* prim : prims) {
+                const json& target = (*Find(*prim, "targets"))[k];
+                const size_t count = ReadAccessor(Index(Member(*prim, "attributes", where), "POSITION", where), 3, false).size() / 3;
+                if (!Find(target, "POSITION")) {
+                    deltas.insert(deltas.end(), count, Vec3{0, 0, 0});
+                    continue;
+                }
+                const std::vector<double> d = ReadAccessor(Index(target, "POSITION", where), 3, false);
+                if (d.size() != count * 3) Fail(where + ": morph target '" + morph + "' has a different number of vertices than its primitive");
+                for (size_t v = 0; v < count; ++v) deltas.push_back({d[3 * v], d[3 * v + 1], d[3 * v + 2]});
+            }
+            if (deltas.size() != vertexCount) Fail(where + ": morph target '" + morph + "' doesn't match the mesh's vertices");
+            part.morphs.push_back(static_cast<size_t>(index));
+            part.morphDeltas.push_back(std::move(deltas));
+        }
+    }
+
+    void ReadSkin(size_t skinIndex, const json& mesh, const SkinnedModel& model, SkinnedPart& part, const std::string& where) {
+        const json& skins = ArrayMember(root_, "skins");
+        if (skinIndex >= skins.size()) Fail(where + ": skin " + std::to_string(skinIndex) + " doesn't exist");
+        const json& skin = skins[skinIndex];
+        const std::string sw = "skin " + std::to_string(skinIndex);
+        for (const json& j : Member(skin, "joints", sw)) {
+            if (!j.is_number_unsigned() || j.get<size_t>() >= model.nodes.size()) Fail(sw + ": invalid joint");
+            part.jointSlot[j.get<size_t>()] = static_cast<uint32_t>(part.joints.size());
+            part.joints.push_back(j.get<uint32_t>());
+        }
+        if (Find(skin, "inverseBindMatrices")) {
+            const std::vector<double> m = ReadAccessor(Index(skin, "inverseBindMatrices", sw), 16, false);
+            if (m.size() != part.joints.size() * 16) Fail(sw + ": inverseBindMatrices doesn't have one matrix per joint");
+            for (size_t j = 0; j < part.joints.size(); ++j) part.inverseBind.push_back(Mat4::FromColumnMajor(m.data() + 16 * j));
+        } else {
+            part.inverseBind.assign(part.joints.size(), Mat4::Identity());
+        }
+        // Each primitive's JOINTS_0/WEIGHTS_0, JOINTS_1/WEIGHTS_1, ...: up to 4 influences per set.
+        part.influenceStart.push_back(0);
+        for (const json* prim : TrianglePrimitives(mesh)) {
+            const json& attributes = Member(*prim, "attributes", where);
+            const size_t count = ReadAccessor(Index(attributes, "POSITION", where), 3, false).size() / 3;
+            std::vector<std::vector<double>> js, ws;
+            for (int set = 0; Find(attributes, "JOINTS_" + std::to_string(set)); ++set) {
+                if (!Find(attributes, "WEIGHTS_" + std::to_string(set))) Fail(where + ": JOINTS_" + std::to_string(set) + " without WEIGHTS_" + std::to_string(set));
+                js.push_back(ReadAccessor(Index(attributes, "JOINTS_" + std::to_string(set), where), 4, false));
+                ws.push_back(ReadAccessor(Index(attributes, "WEIGHTS_" + std::to_string(set), where), 4, false));
+                if (js.back().size() != count * 4 || ws.back().size() != count * 4) Fail(where + ": its skin attributes don't have one entry per vertex");
+            }
+            if (js.empty()) Fail(where + " has a skin but a primitive without JOINTS_0");
+            for (size_t v = 0; v < count; ++v) {
+                const size_t start = part.influences.size();
+                double sum = 0;
+                for (size_t s = 0; s < js.size(); ++s)
+                    for (size_t c = 0; c < 4; ++c) {
+                        const double w = ws[s][4 * v + c];
+                        if (w == 0.0) continue;
+                        const double j = js[s][4 * v + c];
+                        if (j < 0 || j >= static_cast<double>(part.joints.size()) || j != std::floor(j)) Fail(where + ": vertex " + std::to_string(v) + " names a joint the skin doesn't have");
+                        if (!(w > 0) || !std::isfinite(w)) Fail(where + ": vertex " + std::to_string(v) + " has an invalid weight");
+                        part.influences.push_back({part.joints[static_cast<size_t>(j)], w});
+                        sum += w;
+                    }
+                if (!(sum > 0)) Fail(where + ": vertex " + std::to_string(v) + " has no skin weights");
+                for (size_t i = start; i < part.influences.size(); ++i) part.influences[i].weight /= sum;
+                part.influenceStart.push_back(static_cast<uint32_t>(part.influences.size()));
+            }
+        }
+        if (part.influenceStart.size() != part.positions.size() + 1) Fail(where + ": the skin doesn't cover every vertex");
+    }
+
     const json& root_;
     std::string bin_;
     std::filesystem::path baseDir_;
@@ -257,7 +390,7 @@ private:
         const size_t type = Index(a, "componentType", where);
         if (ComponentSize(type) == 0) Fail(where + ": unknown componentType " + std::to_string(type));
         const json& typeName = Member(a, "type", where);
-        const char* expected = components == 3 ? "VEC3" : "SCALAR";
+        const char* expected = components == 16 ? "MAT4" : components == 4 ? "VEC4" : components == 3 ? "VEC3" : "SCALAR";
         if (!typeName.is_string() || typeName.get_ref<const std::string&>() != expected) Fail(where + " must be of type " + expected);
         if (isIndices && type != 5121 && type != 5123 && type != 5125) Fail(where + ": indices must be unsigned integers");
         const json* norm = Find(a, "normalized");
@@ -397,9 +530,8 @@ private:
     }
 };
 
-}  // namespace
-
-Scene ParseGLB(const std::string& bytes, const std::string& name, const std::filesystem::path& baseDir) {
+// The file's JSON document and binary chunk (empty for a .gltf), checked as far as their form goes.
+std::pair<json, std::string> ParseDocument(const std::string& bytes) {
     std::string jsonText, bin;
     size_t first = 0;
     while (first < bytes.size() && (bytes[first] == ' ' || bytes[first] == '\n' || bytes[first] == '\r' || bytes[first] == '\t')) ++first;
@@ -443,16 +575,44 @@ Scene ParseGLB(const std::string& bytes, const std::string& name, const std::fil
     if (const json* asset = Find(root, "asset"); asset && asset->is_object())
         if (const json* version = Find(*asset, "version"); version && version->is_string() && version->get_ref<const std::string&>().rfind("2", 0) != 0)
             Fail("unsupported glTF version " + version->get_ref<const std::string&>() + " (only 2.x is supported)");
-    return Reader(root, std::move(bin), baseDir).Build(name);
+    return {std::move(root), std::move(bin)};
 }
 
-Scene LoadGLB(const std::filesystem::path& path) {
+std::string ReadFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) throw GltfImportError("cannot open '" + path.string() + "'");
     std::ostringstream bytes;
     bytes << file.rdbuf();
+    return bytes.str();
+}
+
+std::filesystem::path BaseDir(const std::filesystem::path& path) { return path.parent_path().empty() ? std::filesystem::path(".") : path.parent_path(); }
+
+}  // namespace
+
+Scene ParseGLB(const std::string& bytes, const std::string& name, const std::filesystem::path& baseDir) {
+    auto [root, bin] = ParseDocument(bytes);
+    return Reader(root, std::move(bin), baseDir).Build(name);
+}
+
+SkinnedModel ParseSkinnedGLB(const std::string& bytes, const std::string& name, const std::filesystem::path& baseDir) {
+    auto [root, bin] = ParseDocument(bytes);
+    return Reader(root, std::move(bin), baseDir).BuildSkinned(name);
+}
+
+Scene LoadGLB(const std::filesystem::path& path) {
+    const std::string bytes = ReadFile(path);
     try {
-        return ParseGLB(bytes.str(), path.stem().string(), path.parent_path().empty() ? std::filesystem::path(".") : path.parent_path());
+        return ParseGLB(bytes, path.stem().string(), BaseDir(path));
+    } catch (const GltfImportError& e) {
+        throw GltfImportError(path.string() + ": " + e.what());
+    }
+}
+
+SkinnedModel LoadSkinnedGLB(const std::filesystem::path& path) {
+    const std::string bytes = ReadFile(path);
+    try {
+        return ParseSkinnedGLB(bytes, path.stem().string(), BaseDir(path));
     } catch (const GltfImportError& e) {
         throw GltfImportError(path.string() + ": " + e.what());
     }
