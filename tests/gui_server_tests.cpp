@@ -103,8 +103,11 @@ TEST_CASE("every state carries the view: the engine's highlight layers") {
     CHECK(red["positions"].size() == red["items"].size() * 9);  // 3 points of 3 numbers per triangle
     const json& lines = view["overlays"][1];
     CHECK(lines["kind"] == "lines");
-    CHECK(lines["positions"].size() % 6 == 0);
-    CHECK_FALSE(lines["positions"].empty());
+    CHECK(lines["positions"].size() % 6 == 0);  // (these cubes only overlap face to face: no crossing lines here)
+
+    // rotated, the cube crosses the other: crossing lines too
+    const json turned = Body(app.Handle("POST", "/api/transform", R"({"node":2,"space":"world","rotationEuler":[0,0,30]})"), Schema::State);
+    CHECK_FALSE(turned["view"]["overlays"][1]["positions"].empty());
 }
 
 TEST_CASE("models can be loaded through the API") {

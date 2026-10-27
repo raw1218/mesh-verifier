@@ -316,6 +316,16 @@ void RunGuiServer(GuiApp& app, const GuiServerOptions& options) {
     };
     server.Get(".*", handle);
     server.Post(".*", handle);
+    // The port is ours alone: a second server on it fails instead of sharing it (cpp-httplib's default allows
+    // SO_REUSEPORT on POSIX; SO_REUSEADDR on Windows lets another socket take a port in use).
+    server.set_socket_options([](httplib::socket_t sock) {
+        int yes = 1;
+#ifdef _WIN32
+        setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&yes), sizeof yes);
+#else
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);  // (only for a port in TIME_WAIT)
+#endif
+    });
     int port = options.port;
     if (port == 0) port = server.bind_to_any_port(options.host);
     else if (!server.bind_to_port(options.host, port)) port = -1;
