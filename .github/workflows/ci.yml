@@ -37,7 +37,9 @@ jobs:
           done
       - name: Sweep the circle character's rig
         if: runner.os == 'Linux'
-        run: ./build/mesh-rig examples/rig/circle/circle.glb examples/rig/circle/circle.rig.json --sweep 5
+        run: |
+          ./build/mesh-rig examples/rig/circle/circle.glb examples/rig/circle/circle.rig.json --sweep 5
+          ./build/mesh-rig examples/rig/circle/circle_surface.glb examples/rig/circle/circle_surface.rig.json --sweep 5
       # kept as downloads on the run's page
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
