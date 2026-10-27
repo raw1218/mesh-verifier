@@ -20,6 +20,20 @@
         "additionalProperties": false
       }
     },
+    "nodePairs": {
+      "description": "The components that intersect, as a set: one entry per pair of components with at least one intersecting triangle pair between them (a and b the same component for triangles of one component), ordered by a, then b.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "a": {"$ref": "common.schema.json#/definitions/nodeRef"},
+          "b": {"$ref": "common.schema.json#/definitions/nodeRef"},
+          "pairs": {"type": "integer", "minimum": 1, "description": "The intersecting triangle pairs between them."}
+        },
+        "required": ["a", "b", "pairs"],
+        "additionalProperties": false
+      }
+    },
     "overlays": {
       "type": "array",
       "items": {
@@ -44,6 +58,6 @@
       }
     }
   },
-  "required": ["revision", "up", "parts", "overlays"],
+  "required": ["revision", "up", "parts", "nodePairs", "overlays"],
   "additionalProperties": false
 }

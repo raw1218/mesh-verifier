@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "mesh_verifier/obj_importer.h"
 #include "mesh_verifier/scene_io.h"
 #include "mesh_verifier/schema.h"
 
@@ -59,11 +60,12 @@ TEST_CASE("an invalid transforms document fails, naming where") {
     CHECK_FALSE(Failure(R"({"transforms":[],"extra":1})").empty());
 }
 
-TEST_CASE("the intersections output matches its schema") {
+TEST_CASE("the intersections output names both components, and matches its schema") {
+    const Scene scene = ParseOBJScene("o skull\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\no jaw\nv 0 0 1\nv 1 0 1\nv 0 1 1\nf 4 5 6\n", "head");
     VerificationReport report;
-    report.intersections.push_back({{0, 2}, {3, 5}, IntersectionType::Crossing, 1.0, {}, {}});
-    const json out = IntersectionsJson(report);
+    report.intersections.push_back({{0, 0}, {1, 0}, IntersectionType::Crossing, 1.0, {}, {}});
+    const json out = IntersectionsJson(scene, report);
     CHECK_NOTHROW(Validate(out, Schema::Intersections));
-    CHECK(out == json::parse(R"({"intersections":[{"a":{"node":0,"triangle":2},"b":{"node":3,"triangle":5}}]})"));
-    CHECK_THROWS_AS(Validate(json::parse(R"({"intersections":[{"a":{"node":0}}]})"), Schema::Intersections), SchemaError);
+    CHECK(out == json::parse(R"({"intersections":[{"a":{"node":0,"name":"skull","triangle":0},"b":{"node":1,"name":"jaw","triangle":0}}]})"));
+    CHECK_THROWS_AS(Validate(json::parse(R"({"intersections":[{"a":{"node":0,"triangle":0},"b":{"node":1,"triangle":0}}]})"), Schema::Intersections), SchemaError);
 }

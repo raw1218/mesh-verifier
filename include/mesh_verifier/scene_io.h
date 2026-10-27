@@ -42,8 +42,8 @@ std::vector<TransformEdit> TransformEditsFromJson(const nlohmann::json& document
 TransformEdit TransformEditFromJson(const nlohmann::json& edit);
 std::vector<TransformEdit> LoadTransformEdits(const std::filesystem::path& path);
 
-// {"intersections": [{"a": {"node": n, "triangle": t}, "b": {...}}, ...]} (schema/intersections.schema.json), for
-// a report from VerifyScene.
-nlohmann::json IntersectionsJson(const VerificationReport& report);
+// {"intersections": [{"a": {"node": n, "name": "...", "triangle": t}, "b": {...}}, ...]}
+// (schema/intersections.schema.json), for `scene`'s report from VerifyScene.
+nlohmann::json IntersectionsJson(const Scene& scene, const VerificationReport& report);
 
 }  // namespace mesh_verifier

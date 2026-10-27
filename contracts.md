@@ -51,15 +51,16 @@ Write results to stdout in this form:
 ```json
 {
   "intersections": [
-    {"a": {"node": 0, "triangle": 2}, "b": {"node": 3, "triangle": 5}},
-    {"a": {"node": 1, "triangle": 0}, "b": {"node": 3, "triangle": 8}}
+    {"a": {"node": 0, "name": "skull", "triangle": 2}, "b": {"node": 3, "name": "masseter", "triangle": 5}},
+    {"a": {"node": 1, "name": "jaw", "triangle": 0}, "b": {"node": 3, "name": "masseter", "triangle": 8}}
   ]
 }
 ```
 
 `intersections` contains one entry for each intersecting triangle pair, so it may be empty or contain multiple entries.
-`a` and `b` identify the two triangles in a pair. Each `node` is a zero-based component index; each `triangle` is a
-zero-based triangle index within that component. A pair is either present or absent; no intersection type or weight is
+`a` and `b` identify the two triangles in a pair. Each `node` is a zero-based component index and `name` that
+component's name (from the model; for OBJ the `o` name); each `triangle` is a zero-based triangle index within that
+component. A pair is either present or absent; no intersection type or weight is
 required. Return exit code `0` whenever verification completes successfully, whether or not intersections are found.
 Return exit code `1` for an invalid argument, model, transform file, or other error. Write errors to stderr.
 
@@ -116,6 +117,9 @@ overlays 2 points per segment.
   "revision": 12,
   "up": "y",
   "parts": [{"node": 0, "mesh": 0, "world": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}],
+  "nodePairs": [
+    {"a": {"node": 0, "name": "skull"}, "b": {"node": 3, "name": "masseter"}, "pairs": 14}
+  ],
   "overlays": [
     {"id": "intersections", "label": "Intersecting triangles", "kind": "triangles", "role": "error",
      "color": [1, 0.23, 0.19, 1],
@@ -129,6 +133,9 @@ overlays 2 points per segment.
 
 - `revision` increases with every change to the scene.
 - `world` is the component's world matrix: 16 numbers, column-major (as glTF writes them).
+- `nodePairs` is the set of components that intersect: one entry per pair of components with at least one
+  intersecting triangle pair between them, with how many (`pairs`); `a` and `b` are the same component when its own
+  triangles intersect. Ordered by `a`, then `b`. Renderers list it as given.
 - `items` (triangles only) names each drawn triangle, in the order of `positions`, for picking and selection.
 - `color` is RGBA from 0 to 1. `role` (`error`, `warning`, `info`, `selection`) says what the layer means; a renderer
   may restyle by role, and otherwise uses `color`.

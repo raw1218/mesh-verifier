@@ -1,6 +1,8 @@
 #include "mesh_verifier/view.h"
 
+#include <map>
 #include <set>
+#include <utility>
 
 #include "mesh_verifier/scene_io.h"
 
@@ -34,6 +36,11 @@ View BuildView(const Scene& scene, const VerificationReport& report, uint64_t re
         const SceneNode& n = scene.Node(i);
         if (n.mesh >= 0 && n.inScene) view.parts.push_back({i, static_cast<size_t>(n.mesh), scene.WorldMatrix(i)});
     }
+
+    std::map<std::pair<size_t, size_t>, size_t> between;  // (the report has a < b, so a's node <= b's)
+    for (const Intersection& hit : report.intersections) ++between[{hit.a.meshIndex, hit.b.meshIndex}];
+    for (const auto& [nodes, count] : between)
+        view.nodePairs.push_back({nodes.first, nodes.second, scene.Node(nodes.first).name, scene.Node(nodes.second).name, count});
 
     Overlay intersecting{"intersections", "Intersecting triangles", OverlayKind::Triangles, OverlayRole::Error, kRed, {}, {}};
     std::set<TriangleRef> flagged;
@@ -70,6 +77,9 @@ json MatrixJson(const Mat4& m) {
 json ViewJson(const View& view) {
     json parts = json::array();
     for (const ViewPart& p : view.parts) parts.push_back({{"node", p.node}, {"mesh", p.mesh}, {"world", MatrixJson(p.world)}});
+    json nodePairs = json::array();
+    for (const NodePair& p : view.nodePairs)
+        nodePairs.push_back({{"a", {{"node", p.a}, {"name", p.aName}}}, {"b", {{"node", p.b}, {"name", p.bName}}}, {"pairs", p.pairs}});
     json overlays = json::array();
     for (const Overlay& o : view.overlays) {
         json items = json::array(), positions = json::array();
@@ -87,7 +97,7 @@ json ViewJson(const View& view) {
                             {"items", items},
                             {"positions", positions}});
     }
-    return {{"revision", view.revision}, {"up", UpAxisName(view.up)}, {"parts", parts}, {"overlays", overlays}};
+    return {{"revision", view.revision}, {"up", UpAxisName(view.up)}, {"parts", parts}, {"nodePairs", nodePairs}, {"overlays", overlays}};
 }
 
 }  // namespace mesh_verifier

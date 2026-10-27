@@ -20,6 +20,27 @@
       "required": ["node", "triangle"],
       "additionalProperties": false
     },
+    "nodeRef": {
+      "description": "One component: its index and its name.",
+      "type": "object",
+      "properties": {
+        "node": {"$ref": "#/definitions/index"},
+        "name": {"type": "string"}
+      },
+      "required": ["node", "name"],
+      "additionalProperties": false
+    },
+    "namedTriangleRef": {
+      "description": "One triangle: a component (node, and its name) and a triangle within that component's mesh.",
+      "type": "object",
+      "properties": {
+        "node": {"$ref": "#/definitions/index"},
+        "name": {"type": "string"},
+        "triangle": {"$ref": "#/definitions/index"}
+      },
+      "required": ["node", "name", "triangle"],
+      "additionalProperties": false
+    },
     "matrix": {
       "description": "A 4x4 affine matrix: 16 numbers in column-major order (as glTF writes them).",
       "type": "array", "items": {"type": "number"}, "minItems": 16, "maxItems": 16

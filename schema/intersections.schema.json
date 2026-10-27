@@ -9,8 +9,8 @@
       "items": {
         "type": "object",
         "properties": {
-          "a": {"$ref": "common.schema.json#/definitions/triangleRef"},
-          "b": {"$ref": "common.schema.json#/definitions/triangleRef"}
+          "a": {"$ref": "common.schema.json#/definitions/namedTriangleRef"},
+          "b": {"$ref": "common.schema.json#/definitions/namedTriangleRef"}
         },
         "required": ["a", "b"],
         "additionalProperties": false

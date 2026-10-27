@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
         if (!args->transforms.empty()) scene.Apply(LoadTransformEdits(args->transforms));  // (all or nothing)
         if (args->headless || args->json) {
             const VerificationReport report = VerifyScene(scene);
-            if (args->json) std::cout << IntersectionsJson(report).dump() << "\n";
+            if (args->json) std::cout << IntersectionsJson(scene, report).dump() << "\n";
             else PrintReport(scene, report);
             std::cout.flush();
             if (args->headless) return 0;

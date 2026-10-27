@@ -46,7 +46,7 @@ class Headless(unittest.TestCase):
         self.assertTrue(all(a == 0 and b == 0 for a, _, b, _ in p))
         entry = json.loads(r.stdout)["intersections"][0]
         self.assertEqual(set(entry), {"a", "b"})
-        self.assertEqual(set(entry["a"]), {"node", "triangle"})
+        self.assertEqual(set(entry["a"]), {"node", "name", "triangle"})
 
     def test_no_intersections_is_success(self):
         r = run("--format", "glb", os.path.join(FIXTURES, "hierarchy.glb"), "--headless", "--json")

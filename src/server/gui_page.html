@@ -87,7 +87,7 @@
     <label><input type="checkbox" id="wire" checked> Wireframe</label>
     <span id="layers" title="Highlight layers sent by the engine"></span>
   </header>
-  <aside id="outliner"><h3>Components</h3><div id="tree"></div></aside>
+  <aside id="outliner"><h3>Components</h3><div id="tree"></div><h3>Intersecting components</h3><div id="nodePairs"></div></aside>
   <main id="view">
     <div id="summary"></div>
     <div id="hint">Click: select &middot; drag: orbit &middot; right-drag: pan &middot; wheel: zoom &middot; W/E/R: move/rotate/scale &middot; Q: local/world &middot; F: frame &middot; Esc: deselect &middot; Ctrl+Z: undo</div>
@@ -227,6 +227,7 @@ function applyState(st) {
   state = st;
   st.nodes.forEach((n, i) => { if (!(dragging && i === selected)) setTransform(objects[i], n.local); });
   drawLayers(st.view);
+  renderNodePairs(st.view.nodePairs);
   $("undo").disabled = !st.canUndo; $("redo").disabled = !st.canRedo;
   renderTree(); renderProps(); renderSummary();
 }
@@ -257,6 +258,21 @@ function drawLayers(view) {
     box.onchange = () => { box.checked ? hiddenLayers.delete(o.id) : hiddenLayers.add(o.id); object.visible = box.checked; };
     label.append(box, ` ${o.label}`); label.style.marginRight = "6px";
     toggles.append(label);
+  }
+}
+
+// the engine's set of intersecting components, listed as sent
+function renderNodePairs(pairs) {
+  const list = $("nodePairs"); list.textContent = "";
+  if (!pairs.length) { const p = document.createElement("p"); p.className = "note"; p.style.padding = "0 10px"; p.textContent = "none"; list.append(p); return; }
+  for (const p of pairs) {
+    const row = document.createElement("div"); row.className = "row"; row.style.paddingLeft = "10px";
+    const name = document.createElement("span"); name.className = "name";
+    name.textContent = p.a.node === p.b.node ? `${p.a.name} (itself)` : `${p.a.name} × ${p.b.name}`;
+    const n = document.createElement("span"); n.className = "badge"; n.textContent = p.pairs; n.title = `${p.pairs} intersecting triangle pairs`;
+    row.title = `components #${p.a.node} and #${p.b.node}`;
+    row.append(name, n);
+    list.append(row);
   }
 }
 

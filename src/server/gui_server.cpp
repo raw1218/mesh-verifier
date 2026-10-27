@@ -232,7 +232,7 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         if (path == "/api/scene") return Json(SceneJson());
         if (path == "/api/state") return Json(StateJson());
         if (path == "/api/view") return Json(ViewJson(BuildView(scene_, report_, revision_)));
-        if (path == "/api/intersections") return Json(IntersectionsJson(report_));
+        if (path == "/api/intersections") return Json(IntersectionsJson(scene_, report_));
         return Error("unknown endpoint " + path, 404);
     }
     if (method != "POST") return Error("method not allowed", 405);

@@ -375,22 +375,21 @@ class MESHVERIFIER_PT_panel(bpy.types.Panel):
         layout.label(text="No intersections" if n == 0 else f"{n} intersecting pair{'s' if n != 1 else ''}",
                      icon="CHECKMARK" if n == 0 else "ERROR")
         hidden = set(s.hidden.split(","))
-        counts = {}
         for o in State.view["overlays"]:
             row = layout.row()
             on = o["id"] not in hidden
             op = row.operator(MESHVERIFIER_OT_toggle_layer.bl_idname, text=o["label"],
                               icon="CHECKBOX_HLT" if on else "CHECKBOX_DEHLT", emboss=False)
             op.layer = o["id"]
-            if o["role"] == "error":
-                for t in o["items"]:
-                    counts[t["node"]] = counts.get(t["node"], 0) + 1
-        if counts:
+        if State.view["nodePairs"]:  # the engine's set of intersecting objects, listed as sent
             box = layout.box()
-            box.label(text="Triangles in red, per object")
-            for node, count in sorted(counts.items(), key=lambda kv: -kv[1]):
-                name = State.nodes[node] if node < len(State.nodes) else f"node {node}"
-                box.label(text=f"{name}: {count}", icon="MESH_DATA")
+            box.label(text="Intersecting objects")
+            for p in State.view["nodePairs"]:
+                a, b = p["a"]["name"], p["b"]["name"]
+                text = f"{a} (itself)" if p["a"]["node"] == p["b"]["node"] else f"{a} × {b}"
+                row = box.row()
+                row.label(text=text, icon="MESH_DATA")
+                row.label(text=f"{p['pairs']} pairs")
         layout.operator(MESHVERIFIER_OT_clear.bl_idname, icon="X")
 
 

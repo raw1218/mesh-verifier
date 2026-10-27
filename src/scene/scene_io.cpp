@@ -99,9 +99,11 @@ std::vector<TransformEdit> LoadTransformEdits(const std::filesystem::path& path)
     }
 }
 
-json IntersectionsJson(const VerificationReport& report) {
+json IntersectionsJson(const Scene& scene, const VerificationReport& report) {
     json list = json::array();
-    const auto ref = [](const TriangleRef& r) { return json{{"node", r.meshIndex}, {"triangle", r.triangleIndex}}; };
+    const auto ref = [&](const TriangleRef& r) {
+        return json{{"node", r.meshIndex}, {"name", scene.Node(r.meshIndex).name}, {"triangle", r.triangleIndex}};
+    };
     for (const Intersection& hit : report.intersections) list.push_back({{"a", ref(hit.a)}, {"b", ref(hit.b)}});
     return {{"intersections", list}};
 }

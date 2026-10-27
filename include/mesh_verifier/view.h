@@ -38,14 +38,24 @@ struct ViewPart {
     Mat4 world;
 };
 
+// Two components with intersecting triangles between them (a == b: triangles of one component), for a renderer's
+// list of what intersects what.
+struct NodePair {
+    size_t a = 0, b = 0;  // a <= b
+    std::string aName, bName;
+    size_t pairs = 0;  // intersecting triangle pairs between them
+};
+
 struct View {
     uint64_t revision = 0;
     UpAxis up = UpAxis::Y;
-    std::vector<ViewPart> parts;  // every displayed component with geometry
+    std::vector<ViewPart> parts;       // every displayed component with geometry
+    std::vector<NodePair> nodePairs;  // the set of intersecting components, ordered by a, then b
     std::vector<Overlay> overlays;
 };
 
 // The view of a scene and its verification (a report from VerifyScene):
+//  - nodePairs: each pair of components with intersecting triangles, and how many triangle pairs;
 //  - "intersections": every triangle in an intersecting pair, red (role error);
 //  - "crossings": the segments along which crossing triangles meet, yellow (role warning).
 View BuildView(const Scene& scene, const VerificationReport& report, uint64_t revision = 0);
