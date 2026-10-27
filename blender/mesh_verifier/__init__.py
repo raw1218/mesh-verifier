@@ -163,6 +163,7 @@ class State:
     objects = []        # every visible mesh object when last sent (some may have no triangles)
     sent = {}           # object name -> world matrix last sent
     view = None         # the engine's last view
+    pairs = []          # the engine's intersecting triangle pairs (GET /api/intersections)
     intersections = 0
     batches = []        # (kind, color, batch) per overlay
     error = ""
@@ -175,6 +176,7 @@ def set_state(state):
     """Takes a state from the engine (state.schema.json): keeps the view and rebuilds the drawing."""
     State.view = state["view"]
     State.intersections = state["intersections"]
+    State.pairs = Engine.request("GET", "/api/intersections")["intersections"] if state["intersections"] else []
     State.batches = []
     if bpy.app.background:  # (no drawing without a window)
         return
@@ -295,7 +297,7 @@ def tick():
 @bpy.app.handlers.persistent
 def on_load(_):
     Engine.stop()
-    State.view, State.batches, State.nodes, State.sent = None, [], [], {}
+    State.view, State.pairs, State.batches, State.nodes, State.sent = None, [], [], [], {}
 
 
 # ---------------------------------------------------------------- UI
@@ -393,6 +395,29 @@ class MESHVERIFIER_PT_panel(bpy.types.Panel):
         layout.operator(MESHVERIFIER_OT_clear.bl_idname, icon="X")
 
 
+class MESHVERIFIER_PT_pairs(bpy.types.Panel):
+    bl_label = "Intersecting triangle pairs"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Mesh Verifier"
+    bl_parent_id = "MESHVERIFIER_PT_panel"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    LIMIT = 200
+
+    @classmethod
+    def poll(cls, context):
+        return bool(State.pairs)
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
+        for p in State.pairs[:self.LIMIT]:
+            a, b = p["a"], p["b"]
+            col.label(text=f"{a['name']} #{a['triangle']}  ×  {b['name']} #{b['triangle']}")
+        if len(State.pairs) > self.LIMIT:
+            col.label(text=f"... and {len(State.pairs) - self.LIMIT} more")
+
+
 class MeshVerifierPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -404,7 +429,7 @@ class MeshVerifierPreferences(bpy.types.AddonPreferences):
 
 
 classes = (MeshVerifierSettings, MESHVERIFIER_OT_verify, MESHVERIFIER_OT_clear, MESHVERIFIER_OT_toggle_layer,
-           MESHVERIFIER_PT_panel, MeshVerifierPreferences)
+           MESHVERIFIER_PT_panel, MESHVERIFIER_PT_pairs, MeshVerifierPreferences)
 
 
 def register():
