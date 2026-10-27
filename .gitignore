@@ -2,3 +2,4 @@ build/
 site/
 *.html
 !docs/**/*.html
+!src/server/*.html

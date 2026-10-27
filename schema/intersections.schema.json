@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Intersections",
+  "description": "The verification result: one entry per intersecting triangle pair. Output of mesh-verify --json and of GET /api/intersections.",
+  "type": "object",
+  "properties": {
+    "intersections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "a": {"$ref": "common.schema.json#/definitions/triangleRef"},
+          "b": {"$ref": "common.schema.json#/definitions/triangleRef"}
+        },
+        "required": ["a", "b"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["intersections"],
+  "additionalProperties": false
+}

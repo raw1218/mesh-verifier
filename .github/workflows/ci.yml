@@ -10,28 +10,41 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build --config Release -j 4
       - name: Test
-        run: ctest --test-dir build --output-on-failure
-      # every example and model: its report and its web page
+        run: ctest --test-dir build -C Release --output-on-failure
+      # every example and model: its report and its static web page
       - name: Run on the examples and models
+        if: runner.os == 'Linux'
         run: |
           mkdir -p out
           for f in examples/*.obj models/*.obj; do
             [ -e "$f" ] || continue
             name=$(basename "$f" .obj)
-            ./build/mesh-verify "$f" > "out/$name.txt" || test $? -eq 1
+            ./build/mesh-verify --format obj "$f" --headless > "out/$name.txt"
             echo "$f: $(tail -n 1 "out/$name.txt")"
             ./build/mesh-verifier-web "$f" -o "out/$name.html"
           done
-      # kept as a download on the run's page
+      # kept as downloads on the run's page
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
         with:
           name: results
           path: out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mesh-verify-${{ runner.os }}
+          path: |
+            build/mesh-verify
+            build/Release/mesh-verify.exe
+          if-no-files-found: ignore

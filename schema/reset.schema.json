@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Reset request",
+  "description": "Request body of POST /api/reset: one component back to its imported transform (with its subtree if `subtree`), or every component when `node` is absent.",
+  "type": "object",
+  "properties": {
+    "node": {"$ref": "common.schema.json#/definitions/index"},
+    "subtree": {"type": "boolean", "default": false}
+  },
+  "additionalProperties": false
+}

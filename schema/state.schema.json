@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "State",
+  "description": "Every component's transforms, the number of intersecting pairs, and the view. Output of GET /api/state and of every POST that changes the scene.",
+  "type": "object",
+  "properties": {
+    "revision": {"type": "integer", "minimum": 0},
+    "nodes": {
+      "description": "One per component, in component order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "local": {"$ref": "common.schema.json#/definitions/transform"},
+          "world": {"$ref": "common.schema.json#/definitions/transform"},
+          "modified": {"type": "boolean"}
+        },
+        "required": ["local", "world", "modified"],
+        "additionalProperties": false
+      }
+    },
+    "intersections": {"type": "integer", "minimum": 0, "description": "The number of intersecting pairs."},
+    "canUndo": {"type": "boolean"},
+    "canRedo": {"type": "boolean"},
+    "view": {"$ref": "view.schema.json"}
+  },
+  "required": ["revision", "nodes", "intersections", "canUndo", "canRedo", "view"],
+  "additionalProperties": false
+}

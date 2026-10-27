@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "View",
+  "description": "What a renderer draws: where each component is, and highlight layers decided by the engine. A renderer draws the overlays as given (coloured triangles and lines in world space) and needs no other logic. Output of GET /api/view, and the `view` of every state.",
+  "type": "object",
+  "properties": {
+    "revision": {"type": "integer", "minimum": 0, "description": "Increases with every change to the scene."},
+    "up": {"$ref": "common.schema.json#/definitions/up"},
+    "parts": {
+      "description": "Every displayed component with geometry.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node": {"$ref": "common.schema.json#/definitions/index"},
+          "mesh": {"$ref": "common.schema.json#/definitions/index"},
+          "world": {"$ref": "common.schema.json#/definitions/matrix"}
+        },
+        "required": ["node", "mesh", "world"],
+        "additionalProperties": false
+      }
+    },
+    "overlays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "description": "A stable name, e.g. \"intersections\"."},
+          "label": {"type": "string", "description": "For a renderer's list of layers."},
+          "kind": {"enum": ["triangles", "lines"]},
+          "role": {"enum": ["error", "warning", "info", "selection"], "description": "What the layer means; a renderer may restyle by role."},
+          "color": {"$ref": "common.schema.json#/definitions/rgba"},
+          "items": {
+            "description": "triangles only: the triangles drawn, in the order of `positions`.",
+            "type": "array", "items": {"$ref": "common.schema.json#/definitions/triangleRef"}
+          },
+          "positions": {
+            "description": "World-space points: 3 per triangle (triangles) or 2 per segment (lines).",
+            "$ref": "common.schema.json#/definitions/positions"
+          }
+        },
+        "required": ["id", "label", "kind", "role", "color", "items", "positions"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["revision", "up", "parts", "overlays"],
+  "additionalProperties": false
+}

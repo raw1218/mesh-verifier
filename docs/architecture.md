@@ -1,17 +1,71 @@
 # Architecture
 
-Four layers, each only depending on the ones above it in this list.
+Layers, each only depending on the ones above it in this list.
 
 ```
 Layer 2  geometry.h            Vec3, Triangle, Mesh, GeometryData: plain data, no logic
-Layer 1  obj_importer.h        OBJ text -> GeometryData
-Layer 3  intersection_verifier GeometryData -> VerificationReport   (knows nothing of files or viewers)
-Layer 4  web_viewer.h          GeometryData + VerificationReport -> an HTML page (never re-checks anything)
+         transform.h           Quat, Mat4, TRS, Euler angles
+         scene.h               Scene: source meshes + a hierarchy of transformable nodes (components)
+Layer 1  obj_importer.h        OBJ text -> GeometryData, or a Scene (one component per `o` object)
+         gltf_importer.h       GLB -> Scene (glTF nodes are the components)
+         scene_io.h            format selection, the transforms file, the JSON result
+Layer 3  intersection_verifier GeometryData -> VerificationReport   (knows nothing of files, scenes or viewers)
+         VerifyScene           Scene -> world-space GeometryData -> VerificationReport with component indices
+Layer 4  web_viewer.h          GeometryData + VerificationReport -> a static HTML page (never re-checks anything)
+         gui_server.h          the interactive GUI: HTTP API + page; edits go to the Scene, then VerifyScene
 ```
 
-Any program can build a `GeometryData` in memory and call `VerifyIntersections` without the importer; the viewer
-only draws a report it's given. Future formats (glTF, FBX, USD) are more Layer 1 importers producing the same
-`GeometryData`; an animated sequence is the same verifier called on each frame's `GeometryData`.
+Any program can build a `GeometryData` in memory and call `VerifyIntersections` without the importer; the viewers
+only draw a report they're given. More formats (FBX, USD) are more Layer 1 importers producing a `Scene`; an
+animated sequence is the same verifier called on each frame's geometry.
+
+## The scene
+
+A `Scene` owns the source meshes (never modified after import), the nodes (name, parent, children, optional mesh,
+local transform) and a copy of every node's imported transform, for reset. A node's world matrix is the product of
+the local matrices from the root down: `world = parentWorld * local`, each local being `T * R * S`.
+
+Edits (`TransformEdit`) replace translation, rotation (Euler degrees, `R = Rz Ry Rx`) and/or scale:
+
+- **local**: the supplied parts of the local TRS are replaced, the rest kept bit for bit.
+- **world**: the node's world transform is split into TRS, the supplied parts replaced, and the local transform
+  solved as `inverse(parentWorld) * targetWorld`. Under identity parents this is the same as a local edit (exact
+  values kept); a translation-only world edit keeps the local rotation and scale and moves only the local origin.
+  When the solved local isn't a TRS (shear, from a rotated child of a non-uniformly scaled parent) it's stored as a
+  matrix, so the node lands exactly where asked; its nearest TRS is kept for display.
+
+`Apply` validates everything first and restores the previous state if any edit fails, so a batch is all or
+nothing. Children aren't touched by an edit: they follow through the hierarchy.
+
+`WorldGeometry` copies each in-scene node's mesh with its vertices multiplied by the world matrix (a node whose
+world matrix is exactly the identity keeps the source coordinates bit for bit), and `VerifyScene` runs the
+verifier on that, renumbering the meshes back to node indices. Rotation matrices have rounding noise around 0 and
++-1 removed, so axis-aligned rotations stay exact.
+
+## Importers
+
+- **OBJ**: `ParseOBJ` (one mesh, unchanged); `ParseOBJScene` splits by `o` into components with the vertices their
+  faces use. A file with at most one object gives exactly the `ParseOBJ` mesh as its single component.
+- **GLB**: header and chunks checked against the file length; the JSON parsed with nlohmann/json; buffers from
+  the BIN chunk, base64 data URIs or files next to the model; accessors read with stride, normalization and sparse
+  substitution, all bounds-checked; primitives of modes 4/5/6 unrolled into one triangle list per glTF mesh, with
+  indices checked against the primitive's vertex count. Nodes keep their glTF indices; matrices are split into TRS
+  when they have no shear. Only nodes reachable from the active scene are drawn and verified.
+
+## The GUI
+
+`GuiApp` holds the scene, the last report and an undo/redo history of node transforms, and answers HTTP requests
+(it's socket-free, so tests drive it directly). `RunGuiServer` serves it with cpp-httplib on 127.0.0.1, the app
+behind a mutex. Request bodies are parsed with nlohmann/json and checked against their JSON Schema (`schema/`,
+embedded at build time, checked with valijson) before anything is applied; the tests check every response against
+its schema too.
+
+The engine decides what is highlighted: `BuildView` (`src/view/`) turns the scene and its report into the view, the
+placed parts plus overlays of world-space triangles and lines with a colour and a role. Renderers draw the overlays
+as given. The page (`src/server/gui_page.html`, embedded at build time) mirrors the hierarchy as three.js objects,
+uses `TransformControls` for the gizmo and sends each change as a local edit (a drag is throttled to one request in
+flight and grouped into one undo step by its `group`); the server re-verifies and returns the state with the new
+view, so the page always shows the server's result. A Blender add-on would use the same API.
 
 ## The verifier
 
@@ -43,7 +97,7 @@ floating-point expansions (sums of non-overlapping doubles, with error-free sums
 This needs plain IEEE double arithmetic: the build turns off fused contractions for that file. It also assumes no
 underflow in the intermediate products (coordinates above about 1e-150 in size), which covers any real mesh.
 
-## The web viewer
+## The static web viewer
 
 `WebViewer::Render` writes one self-contained HTML page: the geometry and the report embedded as JSON, drawn
 with three.js from a CDN. Layers: the base geometry (neutral, flat-shaded), the triangles the report flags (red),

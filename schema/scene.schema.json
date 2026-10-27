@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Scene",
+  "description": "The whole scene: source meshes, components and the state. Output of GET /api/scene and POST /api/load. A renderer fetches it once; after that the state is enough.",
+  "type": "object",
+  "properties": {
+    "name": {"type": "string"},
+    "meshes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "positions": {"type": "array", "items": {"type": "number"}, "description": "x, y, z per vertex."},
+          "triangles": {"type": "array", "items": {"$ref": "common.schema.json#/definitions/index"}, "description": "3 vertex indices per triangle."}
+        },
+        "required": ["name", "positions", "triangles"],
+        "additionalProperties": false
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "parent": {"type": "integer", "minimum": -1, "description": "-1 for a root."},
+          "children": {"type": "array", "items": {"$ref": "common.schema.json#/definitions/index"}},
+          "mesh": {"type": "integer", "minimum": -1, "description": "-1 for a component with no geometry."},
+          "inScene": {"type": "boolean"},
+          "triangles": {"type": "integer", "minimum": 0},
+          "imported": {"$ref": "common.schema.json#/definitions/transform"}
+        },
+        "required": ["name", "parent", "children", "mesh", "inScene", "triangles", "imported"],
+        "additionalProperties": false
+      }
+    },
+    "state": {"$ref": "state.schema.json"}
+  },
+  "required": ["name", "meshes", "components", "state"],
+  "additionalProperties": false
+}

@@ -1,4 +1,4 @@
-// Layer 1: geometry import. Wavefront OBJ only.
+// Layer 1: geometry import: Wavefront OBJ.
 #pragma once
 
 #include <filesystem>
@@ -6,10 +6,11 @@
 #include <string>
 
 #include "mesh_verifier/geometry.h"
+#include "mesh_verifier/scene.h"
 
 namespace mesh_verifier {
 
-// Thrown for a missing file, a malformed line, a bad index or a non-triangular face. The message names the line.
+// Thrown for a missing file, binary (non-text) content, a malformed line, a bad index or a non-triangular face. The message names the line.
 class ObjImportError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
@@ -27,5 +28,11 @@ GeometryData LoadOBJ(const std::filesystem::path& path);
 
 // The same, from OBJ text in memory (`name` becomes the mesh's name).
 GeometryData ParseOBJ(const std::string& text, const std::string& name = "mesh");
+
+// The same file as a scene of transformable components, all roots with identity transforms. Each `o` object that
+// has faces is one component (faces before the first `o` form one more, first), holding the vertices its faces
+// use, in file order. A file with at most one such object is a single component: exactly the mesh LoadOBJ reads.
+Scene LoadOBJScene(const std::filesystem::path& path);
+Scene ParseOBJScene(const std::string& text, const std::string& name = "mesh");
 
 }  // namespace mesh_verifier

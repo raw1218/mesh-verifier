@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transforms document",
+  "description": "Component edits, applied in order, all or nothing. The --transforms file, and a request body of POST /api/transform.",
+  "type": "object",
+  "properties": {
+    "transforms": {"type": "array", "items": {"$ref": "transform-edit.schema.json"}}
+  },
+  "required": ["transforms"],
+  "additionalProperties": false
+}

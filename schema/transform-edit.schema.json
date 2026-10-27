@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "One component edit",
+  "description": "Each supplied field replaces that part of the component's transform in `space`; omitted fields keep their value. A request body of POST /api/transform, and each entry of a transforms document.",
+  "type": "object",
+  "properties": {
+    "node": {"$ref": "common.schema.json#/definitions/index"},
+    "space": {"enum": ["local", "world"], "default": "local"},
+    "translation": {"$ref": "common.schema.json#/definitions/vec3"},
+    "rotationEuler": {"$ref": "common.schema.json#/definitions/vec3"},
+    "scale": {"$ref": "common.schema.json#/definitions/vec3"}
+  },
+  "required": ["node"],
+  "additionalProperties": false
+}

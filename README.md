@@ -32,7 +32,10 @@ overlap, so it is never reported.
 
 ## Build and test
 
-Needs CMake 3.20+ and a C++20 compiler. Nothing graphical.
+Needs CMake 3.24+ and a C++20 compiler; Linux, Windows or macOS. CMake fetches the libraries at configure time:
+[nlohmann/json](https://github.com/nlohmann/json) (JSON), [valijson](https://github.com/tristanpenman/valijson)
+(checking documents against the JSON Schemas in `schema/`), [cpp-httplib](https://github.com/yhirose/cpp-httplib)
+(the local HTTP server) and, for the tests, Catch2 3 (unless one is installed).
 
 ```
 cmake -S . -B build
@@ -40,59 +43,135 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Every push is built and tested on Linux by GitHub Actions, which also renders `examples/sphere_through_torus.obj`
-and publishes it to GitHub Pages: https://raw1218.github.io/mesh-verifier/
+The CTest suite includes the Catch2 unit tests and `tests/cli_tests.py`, end-to-end tests of `mesh-verify` (Python 3,
+standard library only). The GLB fixtures are written by `tests/fixtures/make_fixtures.py`.
+
+Every push is built and tested on Linux and Windows by GitHub Actions. The run keeps, as downloads, the report and
+static page of every example and model, and the `mesh-verify` binaries.
 
 ## Use
 
-From the command line:
+The command line contract is in [contracts.md](contracts.md):
 
 ```
-./build/mesh-verify model.obj            # the report; exit code 1 if anything intersects
-./build/mesh-verify model.obj --json
-./build/mesh-verifier-web model.obj -o model.html   # the web page
+mesh-verify --format <obj|glb> <model> [--headless] [--port <port>] [--transforms <file>] [--json]
 ```
 
-From C++, with a file or with geometry built in memory:
+```
+./build/mesh-verify --format glb robot.glb --headless --json                    # verify, print JSON pairs
+./build/mesh-verify --format glb robot.glb --headless --transforms edits.json   # verify after component edits
+./build/mesh-verify --format obj model.obj                                      # the GUI on http://127.0.0.1:8080/
+./build/mesh-verify --format obj model.obj --port 9000
+./build/mesh-verifier-web model.glb -o model.html                               # a static report page
+```
+
+`--format`, not the extension, picks the loader. Exit code 0 when verification ran (whatever it found), 1 for any
+error (message on stderr). Without `--headless` the URL is printed once the server is listening; `--port 0` picks a
+free port. Pairs are `{"a": {"node", "triangle"}, "b": {...}}`: component index and triangle index within it.
+
+### Components and transforms
+
+A loaded model is a **scene**: source meshes, placed by a hierarchy of **components** (nodes). Each component has a
+local transform (translation, rotation, scale) relative to its parent; its world transform is
+`parentWorld * local`, so transforming a component carries its children along.
+
+- **GLB**: the components are the glTF nodes, with the same indices, names, hierarchy and transforms. A node's
+  triangles are those of all its mesh's primitives, in order.
+- **OBJ**: each `o` object with faces is a component (faces before the first `o` form one more). A file with at
+  most one object is a single component, exactly the mesh it always was. OBJ components are roots with identity
+  transforms (so they rotate and scale about the origin).
+
+An edit replaces any of translation, rotation and scale, in `local` space (relative to the parent) or `world`
+space (the result in the world, whatever the parents do; the local transform is solved for). Omitted parts keep their
+current value. Rotations are Euler angles in degrees, applied about X, then Y, then Z (fixed axes), i.e.
+`R = Rz * Ry * Rx` (scipy `from_euler("xyz")`, three.js order `"ZYX"`). A world edit under a non-uniformly scaled,
+rotated parent may need shear, which TRS can't express; then the local transform is kept as a matrix, so the world
+result is still exactly what was asked.
+
+The source geometry is never modified: verification runs on a world-space copy, and the imported transforms are
+kept, so a component, a component with its subtree, or everything can be reset at any time.
+
+### The GUI
+
+`mesh-verify` without `--headless` serves an interactive page on `http://127.0.0.1:<port>/`:
+
+- **Load** an OBJ or GLB with *Open...* (or drop it on the viewport); the format follows the extension or the
+  format menu.
+- **Select** a component by clicking it in the viewport or in the component tree (which shows the hierarchy,
+  transformed components and per-component intersection counts). Its children are highlighted with it.
+- **Transform** it with the gizmo: `W` move, `E` rotate, `R` scale, `Q` toggle local/world space; hold `Shift` (or
+  tick *Snap*) to snap. Or type exact values in the Transform panel, in local or world space.
+- **Reset** the component, the component with its children, or everything; `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo
+  (a whole drag is one step). `F` frames the selection, `Esc` deselects. Orbit with the left mouse button, pan with
+  the right, zoom with the wheel.
+
+Every edit is verified again on the server, and the page redraws the highlight layers the server sends (the view):
+intersecting triangles in red, the crossings in yellow. The page has no highlighting logic of its own, so any other
+renderer (such as a Blender add-on) shows exactly the same. The page loads three.js from a local npm install of
+`three` when one is found (at build time, or `$MESH_VERIFIER_THREE_DIR` at run time), otherwise from a CDN.
+
+The page uses the HTTP API in [contracts.md](contracts.md#http-api), which scripts and other renderers can use too.
+Every request and response is described by a JSON Schema in [`schema/`](schema/). In the browser console,
+`meshVerifier` exposes `api`, `select`, `edit` and `reset`.
+
+### From C++
 
 ```cpp
-#include "mesh_verifier/intersection_verifier.h"
-#include "mesh_verifier/obj_importer.h"
-#include "mesh_verifier/web_viewer.h"
+#include "mesh_verifier/scene.h"
+#include "mesh_verifier/scene_io.h"
 
 using namespace mesh_verifier;
 
-GeometryData geometry = LoadOBJ("raven_head.obj");      // or fill geometry.meshes yourself
-VerificationReport report = VerifyIntersections(geometry);
-for (const Intersection& hit : report.intersections) {
-    // hit.a, hit.b: {meshIndex, triangleIndex}; hit.type; hit.weight
-}
-WebViewer{}.Write("raven_head.html", geometry, report);
+Scene scene = LoadScene("robot.glb", ModelFormat::Glb);      // or LoadGLB / LoadOBJScene
+TransformEdit edit;
+edit.node = 2;
+edit.space = Space::World;
+edit.rotationEuler = Vec3{0, 0, 45};
+scene.Apply(edit);                                           // throws SceneError (changing nothing) if invalid
+VerificationReport report = VerifyScene(scene);              // TriangleRef::meshIndex is the component index
+scene.Reset(2, /*subtree=*/true);                            // or ResetAll()
 ```
+
+The single-mesh API still works: `LoadOBJ` gives a `GeometryData`, `VerifyIntersections` checks any `GeometryData`,
+and `WebViewer` writes a static page.
 
 ## OBJ input
 
-One file is one mesh. `v` lines are vertices, `f` lines are triangles (`i`, `i/t`, `i//n` or `i/t/n`; only the
-position index is used; negative indices count back). Faces with other than three vertices are an error; every
-other kind of line is ignored. Positions are kept exactly as written.
+`v` lines are vertices, `f` lines are triangles (`i`, `i/t`, `i//n` or `i/t/n`; only the position index is used;
+negative indices count back). Faces with other than three vertices are an error; `o` lines start components (see
+above); every other kind of line is ignored. Positions are kept exactly as written.
+
+## GLB input
+
+glTF 2.0 binary. Geometry and hierarchy only: materials, textures, animations, skins and cameras are ignored.
+Triangle primitives (also strips and fans) with float or quantized positions, indexed or not, sparse accessors,
+node matrices or TRS, embedded or external buffers. The displayed scene is the file's `scene` (nodes outside it are
+listed but not drawn or verified). Draco / meshopt compressed geometry is not supported.
 
 ## Layout
 
 ```
-include/mesh_verifier/   the public headers: geometry, OBJ importer, verifier, report, web viewer
-src/import/              the OBJ importer
+include/mesh_verifier/   the public headers: geometry, transforms, scene, importers, verifier, report, viewers
+src/import/              the OBJ and GLB importers
+src/scene/               transforms, the scene (hierarchy, edits, reset, world geometry), the transforms file
 src/verification/        the verifier: exact predicates, the triangle-pair test, the BVH broad phase
-src/viewer/              the web viewer
+src/view/                the view: what renderers draw (placed parts and highlight overlays)
+src/viewer/              the static web page
+src/server/              the GUI: the HTTP server and API, and the page (gui_page.html)
+src/util/                checking JSON against the schemas
+schema/                  JSON Schemas of every document read or written
+cmake/                   embedding the schemas and the page in the library
 tools/                   mesh-verify and mesh-verifier-web
-tests/                   Catch2 tests (run by CTest) and their fixtures
+tests/                   Catch2 tests, the CLI tests and their fixtures
 examples/                example meshes
 docs/architecture.md     the design
 ```
 
 ## Known limitations
 
-- OBJ is the only input format.
-- The web page loads three.js from a CDN, so it needs internet access to display.
+- The GUI server listens on localhost only and is meant for one user.
+- Verification is exact on the world-space coordinates, which are rounded once when a transform is applied
+  (axis-aligned quarter turns, unit scales and integer translations of integer data stay exact).
 - One rule only: triangle intersections. No other checks, and nothing is repaired.
 
 MIT licence.

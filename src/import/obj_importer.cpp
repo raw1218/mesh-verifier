@@ -65,7 +65,14 @@ int64_t ParseIndex(std::string_view token, int64_t vertexCount, const std::strin
 
 }  // namespace
 
-GeometryData ParseOBJ(const std::string& text, const std::string& name) {
+namespace {
+
+// The whole file as one mesh; also, for each triangle, the index of the `o` object it's in (0 before any `o`,
+// then one more for each `o` line), and the objects' names.
+Mesh ParseMesh(const std::string& text, const std::string& name, std::vector<std::string>& objectNames, std::vector<uint32_t>& triangleObject) {
+    objectNames.assign(1, name);
+    triangleObject.clear();
+    if (text.find('\0') != std::string::npos) throw ObjImportError(name + ": not an OBJ file (it has binary content)");
     Mesh mesh;
     mesh.name = name;
     // positive indices may refer to vertices written later in the file: checked once everything is read
@@ -92,7 +99,12 @@ GeometryData ParseOBJ(const std::string& text, const std::string& name) {
                 if (idx[k] > std::numeric_limits<uint32_t>::max()) Fail(name, line, "face index too large");
             }
             mesh.triangles.push_back({static_cast<uint32_t>(idx[0]), static_cast<uint32_t>(idx[1]), static_cast<uint32_t>(idx[2])});
+            triangleObject.push_back(static_cast<uint32_t>(objectNames.size() - 1));
             faceLines.push_back(line);
+        } else if (tokens[0] == "o") {
+            std::string objectName;
+            for (size_t k = 1; k < tokens.size(); ++k) objectName += (k > 1 ? " " : "") + std::string(tokens[k]);
+            objectNames.push_back(objectName.empty() ? name + "." + std::to_string(objectNames.size()) : objectName);
         }
         // everything else is ignored
     }
@@ -102,9 +114,63 @@ GeometryData ParseOBJ(const std::string& text, const std::string& name) {
             if (i >= mesh.vertices.size())
                 Fail(name, faceLines[t], "face index " + std::to_string(i + 1) + " but the file has only " + std::to_string(mesh.vertices.size()) + " vertices");
     }
+    return mesh;
+}
+
+}  // namespace
+
+GeometryData ParseOBJ(const std::string& text, const std::string& name) {
+    std::vector<std::string> objectNames;
+    std::vector<uint32_t> triangleObject;
     GeometryData geometry;
-    geometry.meshes.push_back(std::move(mesh));
+    geometry.meshes.push_back(ParseMesh(text, name, objectNames, triangleObject));
     return geometry;
+}
+
+Scene ParseOBJScene(const std::string& text, const std::string& name) {
+    std::vector<std::string> objectNames;
+    std::vector<uint32_t> triangleObject;
+    Mesh whole = ParseMesh(text, name, objectNames, triangleObject);
+    std::vector<uint32_t> used;  // the objects that have faces, in file order
+    {
+        std::vector<bool> has(objectNames.size(), false);
+        for (const uint32_t o : triangleObject) has[o] = true;
+        for (uint32_t o = 0; o < objectNames.size(); ++o)
+            if (has[o]) used.push_back(o);
+    }
+    std::vector<Mesh> meshes;
+    if (used.size() <= 1) {
+        // one component: the whole file, exactly as LoadOBJ reads it
+        if (!used.empty()) whole.name = objectNames[used[0]];
+        meshes.push_back(std::move(whole));
+    } else {
+        for (const uint32_t o : used) {
+            Mesh part;
+            part.name = objectNames[o];
+            std::vector<uint32_t> remap(whole.vertices.size(), UINT32_MAX);
+            std::vector<bool> referenced(whole.vertices.size(), false);
+            for (size_t t = 0; t < whole.triangles.size(); ++t)
+                if (triangleObject[t] == o)
+                    for (const uint32_t i : {whole.triangles[t].a, whole.triangles[t].b, whole.triangles[t].c}) referenced[i] = true;
+            for (size_t v = 0; v < whole.vertices.size(); ++v)
+                if (referenced[v]) {
+                    remap[v] = static_cast<uint32_t>(part.vertices.size());
+                    part.vertices.push_back(whole.vertices[v]);
+                }
+            for (size_t t = 0; t < whole.triangles.size(); ++t)
+                if (triangleObject[t] == o) {
+                    const Triangle& tri = whole.triangles[t];
+                    part.triangles.push_back({remap[tri.a], remap[tri.b], remap[tri.c]});
+                }
+            meshes.push_back(std::move(part));
+        }
+    }
+    std::vector<SceneNode> nodes(meshes.size());
+    for (size_t i = 0; i < meshes.size(); ++i) {
+        nodes[i].name = meshes[i].name;
+        nodes[i].mesh = static_cast<int>(i);
+    }
+    return Scene(name, std::move(meshes), std::move(nodes));
 }
 
 GeometryData LoadOBJ(const std::filesystem::path& path) {
@@ -113,6 +179,14 @@ GeometryData LoadOBJ(const std::filesystem::path& path) {
     std::ostringstream text;
     text << file.rdbuf();
     return ParseOBJ(text.str(), path.stem().string());
+}
+
+Scene LoadOBJScene(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) throw ObjImportError("cannot open '" + path.string() + "'");
+    std::ostringstream text;
+    text << file.rdbuf();
+    return ParseOBJScene(text.str(), path.stem().string());
 }
 
 }  // namespace mesh_verifier

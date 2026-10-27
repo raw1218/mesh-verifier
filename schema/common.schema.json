@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shared definitions",
+  "definitions": {
+    "vec3": {
+      "description": "X, Y and Z.",
+      "type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3
+    },
+    "index": {
+      "description": "A zero-based index.",
+      "type": "integer", "minimum": 0, "maximum": 4294967295
+    },
+    "triangleRef": {
+      "description": "One triangle: a component (node) and a triangle within that component's mesh.",
+      "type": "object",
+      "properties": {
+        "node": {"$ref": "#/definitions/index"},
+        "triangle": {"$ref": "#/definitions/index"}
+      },
+      "required": ["node", "triangle"],
+      "additionalProperties": false
+    },
+    "matrix": {
+      "description": "A 4x4 affine matrix: 16 numbers in column-major order (as glTF writes them).",
+      "type": "array", "items": {"type": "number"}, "minItems": 16, "maxItems": 16
+    },
+    "rgba": {
+      "description": "Red, green, blue and alpha, each 0 to 1.",
+      "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 4, "maxItems": 4
+    },
+    "positions": {
+      "description": "World-space points, flat: x, y, z, x, y, z, ...",
+      "type": "array", "items": {"type": "number"}
+    },
+    "transform": {
+      "description": "A transform as translation, rotation (degrees, X then Y then Z about the fixed axes) and scale, and as a matrix. shear is true when the matrix isn't expressible as translation, rotation and scale; the three are then its nearest.",
+      "type": "object",
+      "properties": {
+        "translation": {"$ref": "#/definitions/vec3"},
+        "rotationEuler": {"$ref": "#/definitions/vec3"},
+        "scale": {"$ref": "#/definitions/vec3"},
+        "shear": {"type": "boolean"},
+        "matrix": {"$ref": "#/definitions/matrix"}
+      },
+      "required": ["translation", "rotationEuler", "scale", "shear", "matrix"],
+      "additionalProperties": false
+    },
+    "up": {
+      "description": "The scene's up axis. The geometry is never rotated; renderers orient their camera by it.",
+      "enum": ["y", "z"]
+    }
+  }
+}
