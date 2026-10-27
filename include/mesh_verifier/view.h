@@ -18,7 +18,7 @@ namespace mesh_verifier {
 enum class OverlayKind { Triangles, Lines };
 
 // What an overlay means; a renderer may restyle by role (e.g. to suit its theme), and otherwise uses `color`.
-enum class OverlayRole { Error, Warning, Info, Selection };
+enum class OverlayRole { Error, Warning, Info, Selection, Influence };
 
 struct Overlay {
     std::string id;     // a stable name, e.g. "intersections"
@@ -30,6 +30,8 @@ struct Overlay {
     std::vector<TriangleRef> items;
     // World space: 3 points per triangle, or 2 per line segment.
     std::vector<Vec3> positions;
+    // Optional: a colour per point (RGBA, 0 to 1), in place of `color` (a heat map, say).
+    std::vector<std::array<double, 4>> colors;
 };
 
 struct ViewPart {

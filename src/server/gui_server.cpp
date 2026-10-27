@@ -1,7 +1,9 @@
 #include "mesh_verifier/gui_server.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -141,10 +143,82 @@ json GuiApp::ControlsJson() const {
     json list = json::array();
     if (rig_) {
         const auto controls = rig_->Controls();
-        for (size_t i = 0; i < controls.size(); ++i)
-            list.push_back({{"name", controls[i].name}, {"min", controls[i].min}, {"max", controls[i].max}, {"default", controls[i].defaultValue}, {"value", controls_[i]}});
+        for (size_t i = 0; i < controls.size(); ++i) {
+            json entry{{"name", controls[i].name}, {"min", controls[i].min}, {"max", controls[i].max}, {"default", controls[i].defaultValue}, {"value", controls_[i]}};
+            if (json rules = rig_->Rules(i); !rules.is_null()) entry["rules"] = std::move(rules);
+            list.push_back(std::move(entry));
+        }
     }
     return {{"controls", list}};
+}
+
+namespace {
+
+// Blue (still) through yellow to red (moves the most).
+std::array<double, 4> Heat(double t) {
+    const std::array<double, 3> cold{0.20, 0.35, 0.95}, mid{1.0, 0.85, 0.20}, hot{1.0, 0.20, 0.10};
+    const auto& [a, b] = t < 0.5 ? std::pair{cold, mid} : std::pair{mid, hot};
+    const double s = t < 0.5 ? t * 2 : t * 2 - 1;
+    return {a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s, 1.0};
+}
+
+}  // namespace
+
+View GuiApp::CurrentView() const {
+    View view = BuildView(scene_, report_, revision_);
+    if (!rig_ || !influence_) return view;
+    // Where the chosen control moves each vertex: from the current pose to the control at the shown value.
+    const auto controls = rig_->Controls();
+    const PoseSource::ControlInfo& control = controls[*influence_];
+    std::vector<double> values = controls_;
+    const double current = values[*influence_];
+    values[*influence_] = influenceValue_ ? *influenceValue_ : (control.max - current >= current - control.min ? control.max : control.min);
+    const std::vector<std::vector<Vec3>> target = rig_->Pose(values);
+    std::vector<std::vector<double>> moved(scene_.Meshes().size());
+    double most = 0;
+    size_t moving = 0;
+    for (size_t m = 0; m < moved.size(); ++m)
+        for (size_t v = 0; v < scene_.Meshes()[m].vertices.size(); ++v) {
+            moved[m].push_back(Length(target[m][v] - scene_.Meshes()[m].vertices[v]));
+            most = std::max(most, moved[m].back());
+        }
+    const double still = most * 1e-3;
+    for (const auto& mesh : moved) moving += static_cast<size_t>(std::count_if(mesh.begin(), mesh.end(), [&](double d) { return d > still; }));
+    const size_t stride = std::max<size_t>(1, (moving + 2999) / 3000);  // (at most about 3000 arrows)
+
+    char at[64];
+    std::snprintf(at, sizeof at, "%g", values[*influence_]);
+    Overlay heat{"influence", "What " + control.name + " moves (to " + at + ")", OverlayKind::Triangles, OverlayRole::Influence, {1, 1, 1, 1}, {}, {}, {}};
+    Overlay arrows{"influence_moves", "Where " + control.name + " moves it", OverlayKind::Lines, OverlayRole::Influence, {1, 1, 1, 1}, {}, {}, {}};
+    if (most > 0) {
+        size_t counter = 0;
+        for (size_t i = 0; i < scene_.NodeCount(); ++i) {
+            const SceneNode& n = scene_.Node(i);
+            if (n.mesh < 0 || !n.inScene) continue;
+            const size_t m = static_cast<size_t>(n.mesh);
+            const Mesh& mesh = scene_.Meshes()[m];
+            const Mat4 world = scene_.WorldMatrix(i);
+            for (size_t t = 0; t < mesh.triangles.size(); ++t) {
+                const Triangle& tri = mesh.triangles[t];
+                if (moved[m][tri.a] <= still && moved[m][tri.b] <= still && moved[m][tri.c] <= still) continue;
+                heat.items.push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(t)});
+                for (const uint32_t v : {tri.a, tri.b, tri.c}) {
+                    heat.positions.push_back(TransformPoint(world, mesh.vertices[v]));
+                    heat.colors.push_back(Heat(moved[m][v] / most));
+                }
+            }
+            for (size_t v = 0; v < mesh.vertices.size(); ++v) {
+                if (moved[m][v] <= still || counter++ % stride) continue;
+                arrows.positions.push_back(TransformPoint(world, mesh.vertices[v]));
+                arrows.positions.push_back(TransformPoint(world, target[m][v]));
+                arrows.colors.push_back(Heat(moved[m][v] / most));
+                arrows.colors.push_back(Heat(moved[m][v] / most));
+            }
+        }
+    }
+    view.overlays.push_back(std::move(heat));
+    view.overlays.push_back(std::move(arrows));
+    return view;
 }
 
 void GuiApp::Reverify() {
@@ -175,7 +249,7 @@ json GuiApp::StateJson() const {
             {"intersections", report_.intersections.size()},
             {"canUndo", !undo_.empty()},
             {"canRedo", !redo_.empty()},
-            {"view", ViewJson(BuildView(scene_, report_, revision_))}};
+            {"view", ViewJson(CurrentView())}};
 }
 
 json GuiApp::SceneJson() const {
@@ -247,7 +321,7 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
     if (method == "GET") {
         if (path == "/api/scene") return Json(SceneJson());
         if (path == "/api/state") return Json(StateJson());
-        if (path == "/api/view") return Json(ViewJson(BuildView(scene_, report_, revision_)));
+        if (path == "/api/view") return Json(ViewJson(CurrentView()));
         if (path == "/api/intersections") return Json(IntersectionsJson(scene_, report_));
         if (path == "/api/controls") return Json(ControlsJson());
         return Error("unknown endpoint " + path, 404);
@@ -268,6 +342,8 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         scene_ = std::move(loaded);
         rig_.reset();  // (the rig was for the old model)
         controls_.clear();
+        influence_.reset();
+        influenceValue_.reset();
         undo_.clear();
         redo_.clear();
         lastGroup_.clear();
@@ -324,6 +400,28 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         controls_ = values;
         Reverify();
         return Json({{"meshes", meshes}, {"state", StateJson()}});
+    }
+    if (path == "/api/influence") {
+        const json request = ReadBody(body, Schema::Influence);
+        if (!request.contains("control")) {
+            influence_.reset();
+            influenceValue_.reset();
+            return Json(StateJson());
+        }
+        if (!rig_) return Error("this model has no rig");
+        const auto controls = rig_->Controls();
+        const std::string name = request.at("control").get<std::string>();
+        size_t c = 0;
+        while (c < controls.size() && controls[c].name != name) ++c;
+        if (c == controls.size()) return Error("the rig has no control '" + name + "'");
+        std::optional<double> value;
+        if (request.contains("value")) {
+            value = request.at("value").get<double>();
+            if (*value < controls[c].min || *value > controls[c].max) return Error(name + " = " + request.at("value").dump() + " is outside its range");
+        }
+        influence_ = c;
+        influenceValue_ = value;
+        return Json(StateJson());
     }
     if (path == "/api/reset") {
         const json request = ReadBody(body, Schema::Reset);

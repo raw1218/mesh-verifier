@@ -60,6 +60,7 @@ std::string SchemaFileName(Schema schema) {
         case Schema::Controls: return "controls.schema.json";
         case Schema::Pose: return "pose.schema.json";
         case Schema::Posed: return "posed.schema.json";
+        case Schema::Influence: return "influence.schema.json";
         case Schema::Rig: return "rig.schema.json";
         case Schema::RigReport: return "rig-report.schema.json";
         case Schema::Error: return "error.schema.json";

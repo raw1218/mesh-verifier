@@ -13,7 +13,8 @@
           "min": {"type": "number"},
           "max": {"type": "number"},
           "default": {"type": "number"},
-          "value": {"type": "number"}
+          "value": {"type": "number"},
+          "rules": {"$ref": "rig.schema.json", "description": "The rules this control drives, as a rig file holding only them (when the rig can say)."}
         },
         "required": ["name", "min", "max", "default", "value"],
         "additionalProperties": false

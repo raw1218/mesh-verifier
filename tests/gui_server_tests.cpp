@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <filesystem>
 #include <memory>
 
@@ -153,6 +154,42 @@ TEST_CASE("with a rig, the controls pose the meshes and the result is verified a
     CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {"lift": 3}})")));
     CHECK(IsError(app.Handle("POST", "/api/controls", R"({"values": {"lift": "high"}})")));
     CHECK(app.CurrentScene().Meshes()[0].vertices[0].y == before + 1.5);  // (failed requests change nothing)
+}
+
+TEST_CASE("a control's influence: a heat map and arrows in the view, kept up to date") {
+    Scene scene = LoadGLB(kFixtures / "hierarchy.glb");
+    auto rig = std::make_shared<const Lift>(scene);
+    GuiApp app(std::move(scene), {}, rig);
+    const auto overlay = [](const json& state, const std::string& id) -> json {
+        for (const json& o : state["view"]["overlays"])
+            if (o["id"] == id) return o;
+        return nullptr;
+    };
+    json state = Body(app.Handle("POST", "/api/influence", R"({"control": "lift"})"), Schema::State);
+    const json heat = overlay(state, "influence");
+    REQUIRE(heat.is_object());
+    CHECK(heat["role"] == "influence");
+    CHECK_FALSE(heat["items"].empty());
+    CHECK(heat["colors"].size() == heat["positions"].size() / 3 * 4);
+    const json arrows = overlay(state, "influence_moves");
+    REQUIRE_FALSE(arrows["positions"].empty());
+    const auto length = [](const json& p) {
+        return std::hypot(p[3].get<double>() - p[0].get<double>(), p[4].get<double>() - p[1].get<double>(), p[5].get<double>() - p[2].get<double>());
+    };
+    CHECK(std::abs(length(arrows["positions"]) - 2.0) < 1e-9);  // lift from 0 to its max, 2
+    CHECK(Body(app.Handle("GET", "/api/view", ""), Schema::View)["overlays"].size() == 4);
+
+    // posing keeps it shown, now from the new pose
+    state = Body(app.Handle("POST", "/api/controls", R"({"values": {"lift": 2}})"), Schema::Posed)["state"];
+    const json back = overlay(state, "influence_moves");  // (at the max: shown towards the min, 0)
+    CHECK(std::abs(length(back["positions"]) - 2.0) < 1e-9);
+    CHECK(std::abs(back["positions"][0].get<double>() - arrows["positions"][3].get<double>()) < 1e-9);  // it starts where the lift took it
+
+    CHECK(IsError(app.Handle("POST", "/api/influence", R"({"control": "twist"})")));
+    CHECK(IsError(app.Handle("POST", "/api/influence", R"({"control": "lift", "value": 9})")));
+    CHECK(IsError(app.Handle("POST", "/api/influence", R"({"value": 1})")));
+    state = Body(app.Handle("POST", "/api/influence", "{}"), Schema::State);
+    CHECK(overlay(state, "influence").is_null());
 }
 
 TEST_CASE("without a rig there are no controls") {

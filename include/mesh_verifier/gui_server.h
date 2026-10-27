@@ -14,6 +14,9 @@
 //   GET  /api/controls       the rig's controls and their values; none without a rig     (controls.schema.json)
 //   POST /api/controls       control values by name (pose.schema.json): poses the meshes, verifies again; returns
 //                            the new mesh positions and the state                        (posed.schema.json)
+//   POST /api/influence      {"control": name, "value": x} shows where that control moves the meshes (from the
+//                            current pose to x, by default the end of its range farther away) as view overlays: a
+//                            heat map and arrows; {} stops. Returns the state           (influence.schema.json)
 // Errors are HTTP 4xx with {"error": "..."} (error.schema.json).
 #pragma once
 
@@ -22,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +33,7 @@
 
 #include "mesh_verifier/scene.h"
 #include "mesh_verifier/verification_report.h"
+#include "mesh_verifier/view.h"
 
 namespace mesh_verifier {
 
@@ -50,6 +55,8 @@ public:
     virtual ~PoseSource() = default;
     virtual std::vector<ControlInfo> Controls() const = 0;
     virtual std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const = 0;
+    // The rules control `index` drives, as a rig file (schema/rig.schema.json); null if the rig can't say.
+    virtual nlohmann::json Rules(size_t /*index*/) const { return nullptr; }
 };
 
 // The engine's state and its HTTP API, independent of any socket (so it can be driven directly, e.g. in tests).
@@ -84,8 +91,13 @@ private:
     std::string lastGroup_;
     std::shared_ptr<const PoseSource> rig_;
     std::vector<double> controls_;  // the rig's current control values
+    // The control whose influence is shown (POST /api/influence), and the value it's shown at.
+    std::optional<size_t> influence_;
+    std::optional<double> influenceValue_;
 
     nlohmann::json ControlsJson() const;
+    // The view, with the influence layers when a control is chosen.
+    View CurrentView() const;
 };
 
 // A local three.js package to serve: $MESH_VERIFIER_THREE_DIR, the one found at build time, or a global npm

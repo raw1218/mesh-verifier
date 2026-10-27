@@ -131,6 +131,36 @@ TEST_CASE("an invalid rig, or one that doesn't fit its model, fails and says whe
     CHECK(Failure(With("controls", R"({"name": "2fast", "min": 0, "max": 1})"), model) != "");             // not a name
 }
 
+TEST_CASE("a control's rules: everything that depends on it, as a rig file") {
+    const RigFile file = LoadRigFile(kDir / "circle.rig.json");
+    const RigFile rules = ControlRules(file, "squash_stretch");
+    REQUIRE(rules.controls.size() == 1);
+    CHECK(rules.controls[0].name == "squash_stretch");
+    CHECK(rules.values.size() == 2);  // squash, stretch
+    CHECK(rules.joints.size() == 4);  // each brow follows the squash and the stretch
+    REQUIRE(rules.morphs.size() == 2);
+    CHECK(rules.morphs[0].target == "squash");
+    CHECK(rules.curves.empty());
+    const RigFile brow = ControlRules(file, "brow_raise_L");
+    CHECK(brow.morphs.empty());
+    CHECK(brow.curves.size() == 1);
+    for (const JointOutput& j : brow.joints) CHECK(j.joint == "brow_L");
+    CHECK_THROWS_AS(ControlRules(file, "smile"), RigError);
+
+    // written back, it's a rig file: it reads again, and runs on the model
+    const SkinnedModel model = LoadSkinnedGLB(kDir / "circle.glb");
+    CHECK_NOTHROW(OurRigEvaluator(ParseRigFile(RigFileJson(rules).dump()), model));
+    CHECK(RigFileJson(ParseRigFile(RigFileJson(file).dump())) == RigFileJson(file));
+
+    // a combination of two controls belongs to both
+    RigFile withCombo = file;
+    withCombo.combinations.push_back({"up_and_squash", {"brow_up_L", "squash"}});
+    withCombo.curves.push_back({"both", "up_and_squash", 1});
+    CHECK(ControlRules(withCombo, "brow_raise_L").combinations.size() == 1);
+    CHECK(ControlRules(withCombo, "squash_stretch").combinations.size() == 1);
+    CHECK(ControlRules(withCombo, "brows_angry").combinations.empty());
+}
+
 TEST_CASE("a joint name that matches two nodes is ambiguous") {
     SkinnedModel model = LoadSkinnedGLB(kDir / "circle.glb");
     model.nodes[static_cast<size_t>(model.FindNode("head"))].name = "brow_L";

@@ -42,7 +42,7 @@
           "id": {"type": "string", "description": "A stable name, e.g. \"intersections\"."},
           "label": {"type": "string", "description": "For a renderer's list of layers."},
           "kind": {"enum": ["triangles", "lines"]},
-          "role": {"enum": ["error", "warning", "info", "selection"], "description": "What the layer means; a renderer may restyle by role."},
+          "role": {"enum": ["error", "warning", "info", "selection", "influence"], "description": "What the layer means; a renderer may restyle by role."},
           "color": {"$ref": "common.schema.json#/definitions/rgba"},
           "items": {
             "description": "triangles only: the triangles drawn, in the order of `positions`.",
@@ -51,6 +51,10 @@
           "positions": {
             "description": "World-space points: 3 per triangle (triangles) or 2 per segment (lines).",
             "$ref": "common.schema.json#/definitions/positions"
+          },
+          "colors": {
+            "description": "Optional: a colour per point (RGBA, each 0 to 1, flat: 4 numbers per point), in place of `color`.",
+            "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}
           }
         },
         "required": ["id", "label", "kind", "role", "color", "items", "positions"],

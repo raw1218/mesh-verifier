@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Influence request",
+  "description": "Request body of POST /api/influence: show where `control` moves the meshes, from the current pose to the control at `value` (by default the end of its range farther from its current value), as the view's influence overlays. {} stops showing it.",
+  "type": "object",
+  "properties": {
+    "control": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "dependencies": {"value": ["control"]},
+  "additionalProperties": false
+}

@@ -21,6 +21,7 @@ const char* RoleName(OverlayRole r) {
         case OverlayRole::Error: return "error";
         case OverlayRole::Warning: return "warning";
         case OverlayRole::Selection: return "selection";
+        case OverlayRole::Influence: return "influence";
         case OverlayRole::Info: break;
     }
     return "info";
@@ -89,13 +90,20 @@ json ViewJson(const View& view) {
             positions.push_back(p.y);
             positions.push_back(p.z);
         }
-        overlays.push_back({{"id", o.id},
-                            {"label", o.label},
-                            {"kind", KindName(o.kind)},
-                            {"role", RoleName(o.role)},
-                            {"color", o.color},
-                            {"items", items},
-                            {"positions", positions}});
+        json entry{{"id", o.id},
+                   {"label", o.label},
+                   {"kind", KindName(o.kind)},
+                   {"role", RoleName(o.role)},
+                   {"color", o.color},
+                   {"items", items},
+                   {"positions", positions}};
+        if (!o.colors.empty()) {
+            json colors = json::array();
+            for (const auto& c : o.colors)
+                for (const double x : c) colors.push_back(x);
+            entry["colors"] = colors;
+        }
+        overlays.push_back(std::move(entry));
     }
     return {{"revision", view.revision}, {"up", UpAxisName(view.up)}, {"parts", parts}, {"nodePairs", nodePairs}, {"overlays", overlays}};
 }

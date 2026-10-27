@@ -93,7 +93,7 @@
     <div id="hint">Click: select &middot; drag: orbit &middot; right-drag: pan &middot; wheel: zoom &middot; W/E/R: move/rotate/scale &middot; Q: local/world &middot; F: frame &middot; Esc: deselect &middot; Ctrl+Z: undo</div>
     <div id="drop">Drop an OBJ or GLB file to load it</div>
   </main>
-  <aside id="props"><div id="rig" hidden><h3>Rig controls</h3><div id="controls"></div></div><h3>Transform</h3><div id="propsBody"></div></aside>
+  <aside id="props"><div id="rig" hidden><h3>Rig controls</h3><div id="controls"></div><div id="rules"></div></div><h3>Transform</h3><div id="propsBody"></div></aside>
   <footer><span id="stats"></span><span id="msg"></span></footer>
 </div>
 <script type="importmap">
@@ -218,14 +218,18 @@ function buildScene(data) {
 }
 
 // ---------- rig controls: a slider per control; the engine poses the meshes ----------
-let posePending = null, poseInflight = false;
+let posePending = null, poseInflight = false, rigControls = [], shown = null;
 async function loadControls() {
   let list = [];
   try { list = (await api("GET", "/api/controls")).controls; } catch (err) { fail(err); }
+  rigControls = list; shown = null; renderRules();
   $("rig").hidden = !list.length;
   const box = $("controls"); box.textContent = "";
   for (const c of list) {
-    const row = document.createElement("div"); row.className = "field"; row.style.gridTemplateColumns = "1fr 2fr 48px";
+    const row = document.createElement("div"); row.className = "field"; row.style.gridTemplateColumns = "1fr 2fr 40px 44px";
+    const show = document.createElement("button"); show.textContent = "show"; show.dataset.control = c.name;
+    show.title = "Show the rules this control drives, and where it moves the mesh";
+    show.onclick = () => showInfluence(shown === c.name ? null : c.name);
     const label = document.createElement("label"); label.textContent = c.name; label.title = c.name;
     const slider = document.createElement("input"); slider.type = "range"; slider.min = c.min; slider.max = c.max; slider.step = (c.max - c.min) / 200; slider.value = c.value;
     slider.style.border = "none"; slider.style.padding = "0";
@@ -233,9 +237,49 @@ async function loadControls() {
     slider.oninput = () => { out.textContent = fmt(+slider.value); queuePose({ [c.name]: +slider.value }); };
     slider.ondblclick = () => { slider.value = c.default; slider.oninput(); };
     slider.title = "double-click: back to the default";
-    row.append(label, slider, out);
+    row.append(label, slider, out, show);
     box.append(row);
   }
+}
+
+// the engine draws the influence (heat map and arrows); the page lists the control's rules as the rig gives them
+async function showInfluence(name) {
+  try { applyState(await api("POST", "/api/influence", name ? { control: name } : {})); shown = name; }
+  catch (err) { fail(err); }
+  document.querySelectorAll("#controls button[data-control]").forEach(b => b.classList.toggle("on", b.dataset.control === shown));
+  renderRules();
+}
+
+function renderRules() {
+  const box = $("rules"); box.textContent = "";
+  const c = rigControls.find(k => k.name === shown);
+  if (!c) return;
+  const v3 = v => `(${v.map(fmt).join(", ")})`;
+  const lines = [];
+  const r = c.rules;
+  if (!r) lines.push(["", "this rig doesn't describe its rules"]);
+  else {
+    for (const v of r.values || []) lines.push(["value", `${v.name} = ${v.control} through ${v.map.map(([x, y]) => `${fmt(x)}→${fmt(y)}`).join(", ")}`]);
+    for (const k of r.combinations || []) lines.push(["combination", `${k.name} = ${k.of.join(" × ")}`]);
+    for (const j of r.joints || []) {
+      const what = [j.translation && `move ${v3(j.translation)}`, j.rotationEuler && `rotate ${v3(j.rotationEuler)}°`, j.scale && `scale +${v3(j.scale)}`].filter(Boolean).join(", ");
+      lines.push(["joint", `${j.joint} ← ${j.from}: ${what}`]);
+    }
+    for (const m of r.morphs || []) lines.push(["morph", `${m.morph} ← ${m.from} × ${fmt(m.weight)}`]);
+    for (const k of r.curves || []) lines.push(["curve", `${k.curve} ← ${k.from} × ${fmt(k.weight)}`]);
+    if (!(r.morphs || []).length) lines.push(["morph", "none"]);
+  }
+  const title = document.createElement("h3"); title.textContent = `Rules of ${c.name}`; title.style.padding = "8px 0 4px";
+  box.append(title);
+  for (const [kind, text] of lines) {
+    const row = document.createElement("div"); row.className = "kv"; row.style.marginBottom = "2px";
+    const k = document.createElement("span"); k.textContent = kind;
+    const t = document.createElement("span"); t.textContent = text; t.style.fontFamily = "ui-monospace, monospace"; t.style.fontSize = "11.5px";
+    row.append(k, t); box.append(row);
+  }
+  const note = document.createElement("p"); note.className = "note";
+  note.textContent = "In the view: what this control moves, blue (little) to red (most), with arrows to where it takes each point.";
+  box.append(note);
 }
 function queuePose(values) { posePending = { ...(posePending || {}), ...values }; if (!poseInflight) sendPose(); }
 async function sendPose() {
@@ -289,12 +333,19 @@ function drawLayers(view) {
     const [r, g, b, a] = o.color, color = new THREE.Color(r, g, b);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(o.positions, 3));
+    const perPoint = !!(o.colors && o.colors.length);  // a colour per point (a heat map) instead of one colour
+    if (perPoint) {
+      const rgb = new Float32Array(o.colors.length / 4 * 3);
+      for (let k = 0; k < rgb.length / 3; k++) { rgb[3 * k] = o.colors[4 * k]; rgb[3 * k + 1] = o.colors[4 * k + 1]; rgb[3 * k + 2] = o.colors[4 * k + 2]; }
+      geometry.setAttribute("color", new THREE.BufferAttribute(rgb, 3));
+    }
+    const tint = perPoint ? new THREE.Color(1, 1, 1) : color;
     let object;
     if (o.kind === "triangles") {
-      object = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: a < 1, opacity: a,
+      object = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: tint, vertexColors: perPoint, side: THREE.DoubleSide, transparent: a < 1, opacity: a,
         polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
     } else {
-      object = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color, transparent: true, opacity: a, depthTest: false }));
+      object = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: tint, vertexColors: perPoint, transparent: true, opacity: a, depthTest: false }));
       object.renderOrder = 10;
     }
     object.raycast = () => {};

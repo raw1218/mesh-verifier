@@ -128,7 +128,9 @@ void PrintReport(const Scene& scene, const VerificationReport& report) {
 // A rig as the GUI's pose source: control values to the posed parts' vertices (one mesh per part, as RigScene makes).
 class RigPose : public PoseSource {
 public:
-    RigPose(SkinnedModel model, mesh_rig::RigFile file) : model_(std::move(model)), rig_(std::move(file), model_) {}
+    RigPose(SkinnedModel model, mesh_rig::RigFile file) : model_(std::move(model)), file_(file), rig_(std::move(file), model_) {}
+
+    nlohmann::json Rules(size_t index) const override { return mesh_rig::RigFileJson(mesh_rig::ControlRules(file_, rig_.Definition().controls[index].name)); }
 
     std::vector<ControlInfo> Controls() const override {
         std::vector<ControlInfo> out;
@@ -164,6 +166,7 @@ public:
 
 private:
     SkinnedModel model_;
+    mesh_rig::RigFile file_;
     mesh_rig::OurRigEvaluator rig_;
 };
 

@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "mesh_verifier/skinned_model.h"
 
 namespace mesh_rig {
@@ -91,6 +93,14 @@ public:
 
 RigFile ParseRigFile(const std::string& text);
 RigFile LoadRigFile(const std::filesystem::path& path);
+
+// A rig file as JSON (schema/rig.schema.json).
+nlohmann::json RigFileJson(const RigFile& file);
+
+// The rules one control drives: the part of the rig file that depends on it. That control alone, the values made
+// from it, the combinations using any of those (or earlier such combinations), and every joint, morph and curve
+// output fed by any of them. Throws RigError for an unknown control.
+RigFile ControlRules(const RigFile& file, const std::string& control);
 
 // Runs a rig file on a model: the definition's joints are all the model's nodes, its morphs all the model's morphs,
 // its curves the file's. Throws RigError if the file refers to anything undefined, or to a joint or morph the model

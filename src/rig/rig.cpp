@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
+#include <tuple>
 
 #include <nlohmann/json.hpp>
 
@@ -93,6 +95,67 @@ RigFile ParseRigFile(const std::string& text) {
     for (const json& m : doc.value("morphs", json::array())) file.morphs.push_back({m.at("morph").get<std::string>(), m.at("from").get<std::string>(), m.value("weight", 1.0)});
     for (const json& c : doc.value("curves", json::array())) file.curves.push_back({c.at("curve").get<std::string>(), c.at("from").get<std::string>(), c.value("weight", 1.0)});
     return file;
+}
+
+json RigFileJson(const RigFile& file) {
+    const auto vec = [](const Vec3& v) { return json::array({v.x, v.y, v.z}); };
+    json doc{{"name", file.name}, {"controls", json::array()}};
+    for (const Control& c : file.controls) doc["controls"].push_back({{"name", c.name}, {"min", c.min}, {"max", c.max}, {"default", c.defaultValue}});
+    if (!file.values.empty()) {
+        doc["values"] = json::array();
+        for (const ValueMap& v : file.values) {
+            json map = json::array();
+            for (const auto& [x, y] : v.points) map.push_back({x, y});
+            doc["values"].push_back({{"name", v.name}, {"control", v.control}, {"map", map}});
+        }
+    }
+    if (!file.combinations.empty()) {
+        doc["combinations"] = json::array();
+        for (const Combination& c : file.combinations) doc["combinations"].push_back({{"name", c.name}, {"of", c.of}});
+    }
+    if (!file.joints.empty()) {
+        doc["joints"] = json::array();
+        for (const JointOutput& j : file.joints) {
+            json entry{{"joint", j.joint}, {"from", j.from}};
+            const Vec3 zero{0, 0, 0};
+            if (!(j.translation == zero)) entry["translation"] = vec(j.translation);
+            if (!(j.rotationEuler == zero)) entry["rotationEuler"] = vec(j.rotationEuler);
+            if (!(j.scale == zero)) entry["scale"] = vec(j.scale);
+            doc["joints"].push_back(std::move(entry));
+        }
+    }
+    for (const auto& [key, field, list] : {std::tuple{"morphs", "morph", &file.morphs}, std::tuple{"curves", "curve", &file.curves}}) {
+        if (list->empty()) continue;
+        doc[key] = json::array();
+        for (const WeightOutput& w : *list) doc[key].push_back({{field, w.target}, {"from", w.from}, {"weight", w.weight}});
+    }
+    return doc;
+}
+
+RigFile ControlRules(const RigFile& file, const std::string& control) {
+    RigFile out;
+    out.name = file.name;
+    for (const Control& c : file.controls)
+        if (c.name == control) out.controls.push_back(c);
+    if (out.controls.empty()) throw RigError("the rig has no control '" + control + "'");
+    std::set<std::string> from{control};  // every name that depends on the control
+    for (const ValueMap& v : file.values)
+        if (v.control == control) {
+            out.values.push_back(v);
+            from.insert(v.name);
+        }
+    for (const Combination& c : file.combinations)  // (each uses only earlier names, so one pass)
+        if (std::any_of(c.of.begin(), c.of.end(), [&](const std::string& n) { return from.count(n) > 0; })) {
+            out.combinations.push_back(c);
+            from.insert(c.name);
+        }
+    for (const JointOutput& j : file.joints)
+        if (from.count(j.from)) out.joints.push_back(j);
+    for (const WeightOutput& m : file.morphs)
+        if (from.count(m.from)) out.morphs.push_back(m);
+    for (const WeightOutput& c : file.curves)
+        if (from.count(c.from)) out.curves.push_back(c);
+    return out;
 }
 
 RigFile LoadRigFile(const std::filesystem::path& path) {
