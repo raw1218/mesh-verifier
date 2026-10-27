@@ -37,9 +37,8 @@ size_t Index(const std::vector<std::string>& names, const std::string& name) {
     return 0;
 }
 
-// The circle's rig file with one more entry in one of its lists, as JSON text.
-std::string With(const std::string& list, const std::string& entry) {
-    std::string text = Text(kDir / "circle.rig.json");
+// A rig file's text (by default the circle's) with one more entry at the start of one of its lists.
+std::string With(const std::string& list, const std::string& entry, std::string text = Text(kDir / "circle.rig.json")) {
     const size_t at = text.find("\"" + list + "\": [");
     if (at == std::string::npos) return text;
     const size_t open = text.find('[', at);
@@ -102,13 +101,10 @@ TEST_CASE("a frame poses the model by name; the circle at rest doesn't intersect
 
 TEST_CASE("combinations are products of earlier values") {
     const SkinnedModel model = LoadSkinnedGLB(kDir / "circle.glb");
-    std::string text = With("combinations", R"({"name": "up_and_squash", "of": ["brow_up_L", "squash"]})");
-    if (text.find("up_and_squash") == std::string::npos) {  // (no combinations list yet: add one)
-        text = Text(kDir / "circle.rig.json");
-        text.insert(text.find("\"joints\""), R"("combinations": [{"name": "up_and_squash", "of": ["brow_up_L", "squash"]}],
+    std::string text = Text(kDir / "circle.rig.json");  // (it has no combinations: add the list)
+    text.insert(text.find("\"joints\""), R"("combinations": [{"name": "up_and_squash", "of": ["brow_up_L", "squash"]}],
   )");
-    }
-    text = With("curves", R"({"curve": "both", "from": "up_and_squash", "weight": 2})");
+    text = With("curves", R"({"curve": "both", "from": "up_and_squash", "weight": 2})", text);
     const OurRigEvaluator rig(ParseRigFile(text), model);
     std::vector<double> c = DefaultControls(rig.Definition());
     c[ControlIndex(rig.Definition(), "brow_raise_L")] = 0.5;
