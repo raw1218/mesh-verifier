@@ -9,14 +9,18 @@ Layer 2  geometry.h            Vec3, Triangle, Mesh, GeometryData: plain data, n
 Layer 1  obj_importer.h        OBJ text -> GeometryData, or a Scene (one component per `o` object)
          gltf_importer.h       GLB -> Scene (glTF nodes are the components)
          scene_io.h            format selection, the transforms file, the JSON result
+         schema.h              checking JSON documents against the schemas in schema/
 Layer 3  intersection_verifier GeometryData -> VerificationReport   (knows nothing of files, scenes or viewers)
          VerifyScene           Scene -> world-space GeometryData -> VerificationReport with component indices
+         view.h                Scene + report -> the view: placed parts and highlight overlays (what renderers draw)
 Layer 4  web_viewer.h          GeometryData + VerificationReport -> a static HTML page (never re-checks anything)
-         gui_server.h          the interactive GUI: HTTP API + page; edits go to the Scene, then VerifyScene
+         gui_server.h          the HTTP API + the web GUI page; edits go to the Scene, then VerifyScene
+Clients  gui_page.html         the web GUI: draws the view, sends edits
+         blender/mesh_verifier the Blender add-on: sends Blender's scene and edits, draws the view
 ```
 
 Any program can build a `GeometryData` in memory and call `VerifyIntersections` without the importer; the viewers
-only draw a report they're given. More formats (FBX, USD) are more Layer 1 importers producing a `Scene`; an
+and renderers only draw what they're given. More formats (FBX, USD) are more Layer 1 importers producing a `Scene`; an
 animated sequence is the same verifier called on each frame's geometry.
 
 ## The scene
@@ -65,7 +69,18 @@ placed parts plus overlays of world-space triangles and lines with a colour and 
 as given. The page (`src/server/gui_page.html`, embedded at build time) mirrors the hierarchy as three.js objects,
 uses `TransformControls` for the gizmo and sends each change as a local edit (a drag is throttled to one request in
 flight and grouped into one undo step by its `group`); the server re-verifies and returns the state with the new
-view, so the page always shows the server's result. A Blender add-on would use the same API.
+view, so the page always shows the server's result.
+
+## The Blender add-on
+
+`blender/mesh_verifier/` uses the same API, with Blender as the editor. **Verify** writes every visible mesh object
+into a GLB in memory (one root node per object, placed by its world matrix; triangle i of a node is the object's
+loop triangle i, so results map straight back to Blender's faces) and loads it with `POST /api/load?...&up=z`. In
+**Live** mode a depsgraph handler notes moved objects and changed meshes; a timer sends moved objects as world-space
+edits (`POST /api/transform`, translation, XYZ Euler and scale decomposed from the world matrix; Blender's XYZ Euler
+is the contract's `R = Rz Ry Rx`) and the whole scene again when a mesh changed or a matrix has shear. The add-on
+draws the returned view's overlays with Blender's `gpu` module in the viewport's 3D pass; Blender's own camera,
+selection, gizmos and undo are used as they are. It never copies transforms back from the engine.
 
 ## The verifier
 
@@ -102,4 +117,4 @@ underflow in the intermediate products (coordinates above about 1e-150 in size),
 `WebViewer::Render` writes one self-contained HTML page: the geometry and the report embedded as JSON, drawn
 with three.js from a CDN. Layers: the base geometry (neutral, flat-shaded), the triangles the report flags (red),
 the wireframe and the intersection segments (yellow), each its own object so more overlays can be added later.
-Orbit, pan and zoom with the mouse.
+Orbit, pan and zoom with the mouse. (It predates the view and works out its red triangles from the report itself.)

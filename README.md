@@ -1,11 +1,14 @@
 # Mesh Verifier
 
-Checks triangle meshes for triangles that pass through each other, and shows the result as a web page with the
-intersecting triangles in red.
+Checks triangle meshes for triangles that pass through each other, and shows the intersecting triangles in red: in
+the terminal, in an interactive web viewer, or inside Blender.
 
 It's the baseline of a tool for verifying the geometry that character creation, rigging and animation produce:
 later it will take the vertex positions of animated characters frame by frame. For now it does one thing well:
 **find every pair of triangles that intersect**, exactly.
+
+One C++ engine does all the checking and decides what to highlight; the web viewer and the Blender add-on only draw
+what it sends them, over the HTTP API in [contracts.md](contracts.md).
 
 ## What counts as an intersection
 
@@ -114,6 +117,23 @@ The page uses the HTTP API in [contracts.md](contracts.md#http-api), which scrip
 Every request and response is described by a JSON Schema in [`schema/`](schema/). In the browser console,
 `meshVerifier` exposes `api`, `select`, `edit` and `reset`.
 
+### In Blender
+
+`blender/mesh_verifier/` is a Blender add-on (4.2 or later). It adds a **Mesh Verifier** tab to the 3D viewport's
+sidebar (`N`):
+
+- **Verify** checks every visible mesh object; each object is a component. Intersecting triangles are drawn red and
+  the crossing lines yellow, over the meshes (**X-Ray**) or not.
+- **Live** (on by default) checks again as you work: moving, rotating or scaling an object sends only its new
+  transform; editing a mesh sends the scene again when you leave Edit Mode.
+- The panel shows the number of intersecting pairs, a checkbox per highlight layer, and the red triangles per
+  object. Blender's own selection, gizmos, camera and undo are used as they are.
+
+The add-on starts `mesh-verify` itself and talks to it on localhost. To install: put the `mesh-verify` executable
+(from a build, or from a CI run's downloads) in `blender/mesh_verifier/bin/`, zip the `mesh_verifier` folder, and
+in Blender use *Edit > Preferences > Add-ons > Install from Disk*. The executable's path can also be set in the
+add-on's preferences.
+
 ### From C++
 
 ```cpp
@@ -162,6 +182,7 @@ src/util/                checking JSON against the schemas
 schema/                  JSON Schemas of every document read or written
 cmake/                   embedding the schemas and the page in the library
 tools/                   mesh-verify and mesh-verifier-web
+blender/mesh_verifier/   the Blender add-on
 tests/                   Catch2 tests, the CLI tests and their fixtures
 examples/                example meshes
 docs/architecture.md     the design
@@ -173,5 +194,10 @@ docs/architecture.md     the design
 - Verification is exact on the world-space coordinates, which are rounded once when a transform is applied
   (axis-aligned quarter turns, unit scales and integer translations of integer data stay exact).
 - One rule only: triangle intersections. No other checks, and nothing is repaired.
+- Every edit re-checks the whole scene, so on large meshes (tens of thousands of triangles) each update takes a
+  noticeable time; the Blender add-on waits for each answer, so Blender pauses while it does.
+- The Blender add-on checks each mesh's own shape: modifiers (subdivision, armature) are not applied.
+- `mesh-verifier-web`'s static page still works out its highlighting from the report itself rather than from the
+  engine's view.
 
 MIT licence.
