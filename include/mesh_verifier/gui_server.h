@@ -17,6 +17,8 @@
 //   POST /api/influence      {"control": name, "value": x} shows where that control moves the meshes (from the
 //                            current pose to x, by default the end of its range farther away) as view overlays: a
 //                            heat map and arrows; {} stops. Returns the state           (influence.schema.json)
+//   POST /api/weights        {"joint": name} paints that joint's skin weights on the meshes as a view overlay,
+//                            blue (0) to red (1) as Blender does; {} stops. Returns the state (weights.schema.json)
 // Errors are HTTP 4xx with {"error": "..."} (error.schema.json).
 #pragma once
 
@@ -57,6 +59,10 @@ public:
     virtual std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const = 0;
     // The rules control `index` drives, as a rig file (schema/rig.schema.json); null if the rig can't say.
     virtual nlohmann::json Rules(size_t /*index*/) const { return nullptr; }
+    // The joints the meshes are skinned to, and how much each vertex of each source mesh (in scene mesh order)
+    // follows one of them, 0 to 1. None if the rig has no skin.
+    virtual std::vector<std::string> Joints() const { return {}; }
+    virtual std::vector<std::vector<double>> Weights(size_t /*joint*/) const { return {}; }
 };
 
 // The engine's state and its HTTP API, independent of any socket (so it can be driven directly, e.g. in tests).
@@ -94,6 +100,8 @@ private:
     // The control whose influence is shown (POST /api/influence), and the value it's shown at.
     std::optional<size_t> influence_;
     std::optional<double> influenceValue_;
+    // The joint whose skin weights are painted (POST /api/weights).
+    std::optional<size_t> weights_;
 
     nlohmann::json ControlsJson() const;
     // The view, with the influence layers when a control is chosen.

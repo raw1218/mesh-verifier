@@ -16,6 +16,29 @@ int SkinnedModel::FindMorph(const std::string& n) const {
     return -1;
 }
 
+std::vector<size_t> SkinJoints(const SkinnedModel& model) {
+    std::vector<char> used(model.nodes.size(), 0);
+    for (const SkinnedPart& part : model.parts)
+        for (const uint32_t j : part.joints) used[j] = 1;
+    std::vector<size_t> out;
+    for (size_t i = 0; i < used.size(); ++i)
+        if (used[i]) out.push_back(i);
+    return out;
+}
+
+std::vector<double> JointWeights(const SkinnedModel& model, const SkinnedPart& part, size_t node) {
+    std::vector<double> w(part.positions.size(), 0.0);
+    if (!part.Skinned()) {
+        for (int n = static_cast<int>(part.node); n >= 0; n = model.nodes[static_cast<size_t>(n)].parent)
+            if (static_cast<size_t>(n) == node) return std::vector<double>(part.positions.size(), 1.0);
+        return w;
+    }
+    for (size_t v = 0; v < w.size(); ++v)
+        for (uint32_t i = part.influenceStart[v]; i < part.influenceStart[v + 1]; ++i)
+            if (part.influences[i].node == node) w[v] += part.influences[i].weight;
+    return w;
+}
+
 ModelPose RestPose(const SkinnedModel& model) {
     ModelPose pose;
     for (const SkinNode& n : model.nodes) pose.local.push_back(n.rest);

@@ -132,6 +132,19 @@ public:
 
     nlohmann::json Rules(size_t index) const override { return mesh_rig::RigFileJson(mesh_rig::ControlRules(file_, rig_.Definition().controls[index].name)); }
 
+    std::vector<std::string> Joints() const override {
+        std::vector<std::string> out;
+        for (const size_t j : SkinJoints(model_)) out.push_back(model_.nodes[j].name);
+        return out;
+    }
+
+    std::vector<std::vector<double>> Weights(size_t joint) const override {
+        const size_t node = SkinJoints(model_).at(joint);
+        std::vector<std::vector<double>> out;
+        for (const SkinnedPart& part : model_.parts) out.push_back(JointWeights(model_, part, node));
+        return out;
+    }
+
     std::vector<ControlInfo> Controls() const override {
         std::vector<ControlInfo> out;
         for (const mesh_rig::Control& c : rig_.Definition().controls) out.push_back({c.name, c.min, c.max, c.defaultValue});

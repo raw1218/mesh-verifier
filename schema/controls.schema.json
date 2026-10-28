@@ -19,8 +19,9 @@
         "required": ["name", "min", "max", "default", "value"],
         "additionalProperties": false
       }
-    }
+    },
+    "joints": {"type": "array", "items": {"type": "string"}, "description": "The joints the meshes are skinned to (for POST /api/weights)."}
   },
-  "required": ["controls"],
+  "required": ["controls", "joints"],
   "additionalProperties": false
 }

@@ -49,6 +49,22 @@ TEST_CASE("the rest pose gives the bind positions, and nothing intersects") {
     CHECK(VerifyIntersections(rest).intersections.empty());
 }
 
+TEST_CASE("skin joints and per-joint weights") {
+    const SkinnedModel m = LoadSkinnedGLB(std::filesystem::path(EXAMPLES_DIR) / "rig" / "circle" / "circle_surface.glb");
+    std::vector<std::string> joints;
+    for (const size_t j : SkinJoints(m)) joints.push_back(m.nodes[j].name);
+    CHECK(joints.size() == 3);
+    const SkinnedPart& head = m.parts[Part(m, "head")];
+    const std::vector<double> left = JointWeights(m, head, static_cast<size_t>(m.FindNode("brow_L")));
+    const std::vector<double> root = JointWeights(m, head, static_cast<size_t>(m.FindNode("root")));
+    for (size_t v = 0; v < head.positions.size(); ++v) {
+        const Vec3& p = head.positions[v];  // (glTF: +Y up, +X the character's left)
+        if (p.y < -0.01) CHECK(left[v] == 0.0);                  // the bottom half never follows the brows
+        if (p.y > 0.75 && p.x > 0.4) CHECK(left[v] > 0.95);      // the top of the left side all does
+        CHECK(std::abs(left[v] + root[v] + JointWeights(m, head, static_cast<size_t>(m.FindNode("brow_R")))[v] - 1.0) < 1e-6);
+    }
+}
+
 TEST_CASE("joints move their skinned vertices; morphs move theirs") {
     const SkinnedModel m = LoadSkinnedGLB(kCircle);
     ModelPose pose = RestPose(m);

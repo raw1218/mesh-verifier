@@ -149,7 +149,7 @@ json GuiApp::ControlsJson() const {
             list.push_back(std::move(entry));
         }
     }
-    return {{"controls", list}};
+    return {{"controls", list}, {"joints", rig_ ? rig_->Joints() : std::vector<std::string>{}}};
 }
 
 namespace {
@@ -164,8 +164,39 @@ std::array<double, 4> Heat(double t) {
 
 }  // namespace
 
+// Blender's weight paint colours: blue (0), cyan, green, yellow, red (1).
+std::array<double, 4> WeightColor(double w) {
+    static const std::array<std::array<double, 3>, 5> stops{{{0, 0, 1}, {0, 1, 1}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}}};
+    const double x = std::clamp(w, 0.0, 1.0) * 4;
+    const size_t i = std::min<size_t>(static_cast<size_t>(x), 3);
+    const double s = x - static_cast<double>(i);
+    const auto& a = stops[i];
+    const auto& b = stops[i + 1];
+    return {a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s, 1.0};
+}
+
 View GuiApp::CurrentView() const {
     View view = BuildView(scene_, report_, revision_);
+    if (rig_ && weights_) {  // the chosen joint's skin weights over every triangle
+        const std::vector<std::vector<double>> w = rig_->Weights(*weights_);
+        Overlay paint{"weights", "Weights of " + rig_->Joints()[*weights_], OverlayKind::Triangles, OverlayRole::Info, {1, 1, 1, 1}, {}, {}, {}};
+        for (size_t i = 0; i < scene_.NodeCount() && w.size() == scene_.Meshes().size(); ++i) {
+            const SceneNode& n = scene_.Node(i);
+            if (n.mesh < 0 || !n.inScene) continue;
+            const size_t m = static_cast<size_t>(n.mesh);
+            const Mesh& mesh = scene_.Meshes()[m];
+            if (w[m].size() != mesh.vertices.size()) continue;
+            const Mat4 world = scene_.WorldMatrix(i);
+            for (size_t t = 0; t < mesh.triangles.size(); ++t) {
+                paint.items.push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(t)});
+                for (const uint32_t v : {mesh.triangles[t].a, mesh.triangles[t].b, mesh.triangles[t].c}) {
+                    paint.positions.push_back(TransformPoint(world, mesh.vertices[v]));
+                    paint.colors.push_back(WeightColor(w[m][v]));
+                }
+            }
+        }
+        view.overlays.push_back(std::move(paint));
+    }
     if (!rig_ || !influence_) return view;
     // Where the chosen control moves each vertex: from the current pose to the control at the shown value.
     const auto controls = rig_->Controls();
@@ -344,6 +375,7 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         controls_.clear();
         influence_.reset();
         influenceValue_.reset();
+        weights_.reset();
         undo_.clear();
         redo_.clear();
         lastGroup_.clear();
@@ -400,6 +432,19 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         controls_ = values;
         Reverify();
         return Json({{"meshes", meshes}, {"state", StateJson()}});
+    }
+    if (path == "/api/weights") {
+        const json request = ReadBody(body, Schema::Weights);
+        if (!request.contains("joint")) {
+            weights_.reset();
+            return Json(StateJson());
+        }
+        if (!rig_) return Error("this model has no rig");
+        const std::vector<std::string> joints = rig_->Joints();
+        const auto it = std::find(joints.begin(), joints.end(), request.at("joint").get<std::string>());
+        if (it == joints.end()) return Error("the meshes aren't skinned to a joint '" + request.at("joint").get<std::string>() + "'");
+        weights_ = static_cast<size_t>(it - joints.begin());
+        return Json(StateJson());
     }
     if (path == "/api/influence") {
         const json request = ReadBody(body, Schema::Influence);

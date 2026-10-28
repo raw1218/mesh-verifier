@@ -22,6 +22,7 @@ enum class Schema {
     Pose,           // pose.schema.json
     Posed,          // posed.schema.json
     Influence,      // influence.schema.json
+    Weights,        // weights.schema.json
     Rig,            // rig.schema.json
     RigReport,      // rig-report.schema.json
     Error,          // error.schema.json (keep last)

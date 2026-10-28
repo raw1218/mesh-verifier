@@ -121,6 +121,16 @@ public:
         for (const Mesh& m : scene.Meshes()) rest_.push_back(m.vertices);
     }
     std::vector<ControlInfo> Controls() const override { return {{"lift", 0, 2, 0}}; }
+    // one joint, "top": weight 1 for each mesh's first vertex, 0 for the rest
+    std::vector<std::string> Joints() const override { return {"top"}; }
+    std::vector<std::vector<double>> Weights(size_t) const override {
+        std::vector<std::vector<double>> w;
+        for (const auto& mesh : rest_) {
+            w.emplace_back(mesh.size(), 0.0);
+            if (!mesh.empty()) w.back()[0] = 1.0;
+        }
+        return w;
+    }
     std::vector<std::vector<Vec3>> Pose(const std::vector<double>& values) const override {
         std::vector<std::vector<Vec3>> out = rest_;
         for (auto& mesh : out)
@@ -190,6 +200,31 @@ TEST_CASE("a control's influence: a heat map and arrows in the view, kept up to 
     CHECK(IsError(app.Handle("POST", "/api/influence", R"({"value": 1})")));
     state = Body(app.Handle("POST", "/api/influence", "{}"), Schema::State);
     CHECK(overlay(state, "influence").is_null());
+}
+
+TEST_CASE("a joint's skin weights painted over the meshes") {
+    Scene scene = LoadGLB(kFixtures / "hierarchy.glb");
+    auto rig = std::make_shared<const Lift>(scene);
+    GuiApp app(std::move(scene), {}, rig);
+    CHECK(Body(app.Handle("GET", "/api/controls", ""), Schema::Controls)["joints"] == json::array({"top"}));
+    const json state = Body(app.Handle("POST", "/api/weights", R"({"joint": "top"})"), Schema::State);
+    json paint;
+    for (const json& o : state["view"]["overlays"])
+        if (o["id"] == "weights") paint = o;
+    REQUIRE(paint.is_object());
+    size_t triangles = 0;
+    for (const SceneNode& n : app.CurrentScene().Nodes())
+        if (n.mesh >= 0 && n.inScene) triangles += app.CurrentScene().Meshes()[static_cast<size_t>(n.mesh)].triangles.size();
+    CHECK(paint["items"].size() == triangles);  // every triangle, weight 0 included
+    bool red = false, blue = false;
+    for (size_t k = 0; k + 3 < paint["colors"].size(); k += 4) {
+        red = red || (paint["colors"][k] == 1.0 && paint["colors"][k + 2] == 0.0);
+        blue = blue || (paint["colors"][k] == 0.0 && paint["colors"][k + 2] == 1.0);
+    }
+    CHECK(red);
+    CHECK(blue);
+    CHECK(IsError(app.Handle("POST", "/api/weights", R"({"joint": "elbow"})")));
+    for (const json& o : Body(app.Handle("POST", "/api/weights", "{}"), Schema::State)["view"]["overlays"]) CHECK(o["id"] != "weights");
 }
 
 TEST_CASE("without a rig there are no controls") {

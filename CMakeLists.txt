@@ -45,6 +45,7 @@ set(MESH_VERIFIER_SCHEMAS
     schema/pose.schema.json
     schema/posed.schema.json
     schema/influence.schema.json
+    schema/weights.schema.json
     schema/rig.schema.json
     schema/rig-report.schema.json
     schema/error.schema.json)

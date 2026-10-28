@@ -61,6 +61,13 @@ struct ModelPose {
     std::vector<double> morphWeights;  // per morph name
 };
 
+// The nodes the parts are skinned to (any part's skin joints), in node order.
+std::vector<size_t> SkinJoints(const SkinnedModel& model);
+
+// How much each of a part's vertices follows `node`: its skin weight for that joint (0 if none); for a part that
+// isn't skinned, 1 when it hangs from that node (it is the node, or below it), else 0.
+std::vector<double> JointWeights(const SkinnedModel& model, const SkinnedPart& part, size_t node);
+
 // Every node at its rest transform, every morph at 0.
 ModelPose RestPose(const SkinnedModel& model);
 
