@@ -15,8 +15,9 @@
 //   POST /api/controls       control values by name (pose.schema.json): poses the meshes, verifies again; returns
 //                            the new mesh positions and the state                        (posed.schema.json)
 //   POST /api/influence      {"control": name, "value": x} shows where that control moves the meshes (from the
-//                            current pose to x, by default the end of its range farther away) as view overlays: a
-//                            heat map and arrows; {} stops. Returns the state           (influence.schema.json)
+//                            current pose to x, by default the end of its range farther away) as a view overlay:
+//                            a heat map of how far each vertex moves; {} stops. Returns the state
+//                                                                                        (influence.schema.json)
 //   POST /api/weights        {"joint": name} paints that joint's skin weights on the meshes as a view overlay,
 //                            blue (0) to red (1) as Blender does; {} stops. Returns the state (weights.schema.json)
 // Errors are HTTP 4xx with {"error": "..."} (error.schema.json).

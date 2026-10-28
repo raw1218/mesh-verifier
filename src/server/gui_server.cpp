@@ -207,22 +207,17 @@ View GuiApp::CurrentView() const {
     const std::vector<std::vector<Vec3>> target = rig_->Pose(values);
     std::vector<std::vector<double>> moved(scene_.Meshes().size());
     double most = 0;
-    size_t moving = 0;
     for (size_t m = 0; m < moved.size(); ++m)
         for (size_t v = 0; v < scene_.Meshes()[m].vertices.size(); ++v) {
             moved[m].push_back(Length(target[m][v] - scene_.Meshes()[m].vertices[v]));
             most = std::max(most, moved[m].back());
         }
     const double still = most * 1e-3;
-    for (const auto& mesh : moved) moving += static_cast<size_t>(std::count_if(mesh.begin(), mesh.end(), [&](double d) { return d > still; }));
-    const size_t stride = std::max<size_t>(1, (moving + 2999) / 3000);  // (at most about 3000 arrows)
 
     char at[64];
     std::snprintf(at, sizeof at, "%g", values[*influence_]);
     Overlay heat{"influence", "What " + control.name + " moves (to " + at + ")", OverlayKind::Triangles, OverlayRole::Influence, {1, 1, 1, 1}, {}, {}, {}};
-    Overlay arrows{"influence_moves", "Where " + control.name + " moves it", OverlayKind::Lines, OverlayRole::Influence, {1, 1, 1, 1}, {}, {}, {}};
     if (most > 0) {
-        size_t counter = 0;
         for (size_t i = 0; i < scene_.NodeCount(); ++i) {
             const SceneNode& n = scene_.Node(i);
             if (n.mesh < 0 || !n.inScene) continue;
@@ -238,17 +233,9 @@ View GuiApp::CurrentView() const {
                     heat.colors.push_back(Heat(moved[m][v] / most));
                 }
             }
-            for (size_t v = 0; v < mesh.vertices.size(); ++v) {
-                if (moved[m][v] <= still || counter++ % stride) continue;
-                arrows.positions.push_back(TransformPoint(world, mesh.vertices[v]));
-                arrows.positions.push_back(TransformPoint(world, target[m][v]));
-                arrows.colors.push_back(Heat(moved[m][v] / most));
-                arrows.colors.push_back(Heat(moved[m][v] / most));
-            }
         }
     }
     view.overlays.push_back(std::move(heat));
-    view.overlays.push_back(std::move(arrows));
     return view;
 }
 

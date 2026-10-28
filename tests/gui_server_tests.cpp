@@ -166,7 +166,7 @@ TEST_CASE("with a rig, the controls pose the meshes and the result is verified a
     CHECK(app.CurrentScene().Meshes()[0].vertices[0].y == before + 1.5);  // (failed requests change nothing)
 }
 
-TEST_CASE("a control's influence: a heat map and arrows in the view, kept up to date") {
+TEST_CASE("a control's influence: a heat map in the view, kept up to date") {
     Scene scene = LoadGLB(kFixtures / "hierarchy.glb");
     auto rig = std::make_shared<const Lift>(scene);
     GuiApp app(std::move(scene), {}, rig);
@@ -181,19 +181,14 @@ TEST_CASE("a control's influence: a heat map and arrows in the view, kept up to 
     CHECK(heat["role"] == "influence");
     CHECK_FALSE(heat["items"].empty());
     CHECK(heat["colors"].size() == heat["positions"].size() / 3 * 4);
-    const json arrows = overlay(state, "influence_moves");
-    REQUIRE_FALSE(arrows["positions"].empty());
-    const auto length = [](const json& p) {
-        return std::hypot(p[3].get<double>() - p[0].get<double>(), p[4].get<double>() - p[1].get<double>(), p[5].get<double>() - p[2].get<double>());
-    };
-    CHECK(std::abs(length(arrows["positions"]) - 2.0) < 1e-9);  // lift from 0 to its max, 2
-    CHECK(Body(app.Handle("GET", "/api/view", ""), Schema::View)["overlays"].size() == 4);
+    CHECK(heat["colors"][0] == 1.0);  // lift moves everything equally: all of it the most, red
+    CHECK(heat["label"].get<std::string>().find("to 2") != std::string::npos);  // (from 0 to its far end, 2)
+    CHECK(Body(app.Handle("GET", "/api/view", ""), Schema::View)["overlays"].size() == 3);
 
-    // posing keeps it shown, now from the new pose
+    // posing keeps it shown, now from the new pose (at the max: towards the min)
     state = Body(app.Handle("POST", "/api/controls", R"({"values": {"lift": 2}})"), Schema::Posed)["state"];
-    const json back = overlay(state, "influence_moves");  // (at the max: shown towards the min, 0)
-    CHECK(std::abs(length(back["positions"]) - 2.0) < 1e-9);
-    CHECK(std::abs(back["positions"][0].get<double>() - arrows["positions"][3].get<double>()) < 1e-9);  // it starts where the lift took it
+    CHECK(overlay(state, "influence")["label"].get<std::string>().find("to 0") != std::string::npos);
+    CHECK(overlay(state, "influence_moves").is_null());  // (no arrows)
 
     CHECK(IsError(app.Handle("POST", "/api/influence", R"({"control": "twist"})")));
     CHECK(IsError(app.Handle("POST", "/api/influence", R"({"control": "lift", "value": 9})")));

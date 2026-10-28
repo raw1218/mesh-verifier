@@ -232,7 +232,7 @@ async function loadControls() {
   for (const c of list) {
     const row = document.createElement("div"); row.className = "field"; row.style.gridTemplateColumns = "1fr 2fr 40px 44px";
     const show = document.createElement("button"); show.textContent = "show"; show.dataset.control = c.name;
-    show.title = "Show the rules this control drives, and where it moves the mesh";
+    show.title = "Show the rules this control drives, and how far it moves each part of the mesh";
     show.onclick = () => showInfluence(shown === c.name ? null : c.name);
     const label = document.createElement("label"); label.textContent = c.name; label.title = c.name;
     const slider = document.createElement("input"); slider.type = "range"; slider.min = c.min; slider.max = c.max; slider.step = (c.max - c.min) / 200; slider.value = c.value;
@@ -282,7 +282,7 @@ function renderRules() {
     row.append(k, t); box.append(row);
   }
   const note = document.createElement("p"); note.className = "note";
-  note.textContent = "In the view: what this control moves, blue (little) to red (most), with arrows to where it takes each point.";
+  note.textContent = "In the view: how far this control moves each point, blue (little) to red (the most it moves anything).";
   box.append(note);
 }
 function queuePose(values) { posePending = { ...(posePending || {}), ...values }; if (!poseInflight) sendPose(); }
