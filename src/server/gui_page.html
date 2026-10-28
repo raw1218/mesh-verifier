@@ -83,6 +83,7 @@
     <button id="resetSel" title="Reset the selected component to its imported transform">Reset selected</button>
     <button id="resetAll" title="Reset every component to its imported transform">Reset all</button>
     <span class="sep"></span>
+    <label title="Check for intersections after every change. Off, moves and rig poses are much faster on big models"><input type="checkbox" id="verify" checked> Verify</label>
     <button id="frame" title="Frame the selection, or everything (F)">Frame <kbd>F</kbd></button>
     <label><input type="checkbox" id="wire" checked> Wireframe</label>
     <span id="layers" title="Highlight layers sent by the engine"></span>
@@ -325,6 +326,7 @@ function applyState(st) {
   drawLayers(st.view);
   renderNodePairs(st.view.nodePairs);
   $("undo").disabled = !st.canUndo; $("redo").disabled = !st.canRedo;
+  $("verify").checked = st.verifying;
   renderTree(); renderProps(); renderSummary();
 }
 
@@ -507,8 +509,10 @@ function renderSummary() {
   const flagged = errorCount.reduce((s, n) => s + n, 0);
   const k = state.intersections;
   $("summary").innerHTML = `${comps.length} component${comps.length === 1 ? "" : "s"}, ${tris} triangles<br>` +
-    (k ? `<b>${k} intersecting pair${k === 1 ? "" : "s"}</b>, ${flagged} triangles in red` : `<b class="ok">no intersections</b>`);
-  $("stats").textContent = `${document.title.replace(/ - Mesh Verifier$/, "")}: ${comps.length} components (${withGeometry} with geometry), ${tris} triangles, ${k} intersecting pairs`;
+    (!state.verifying ? `<b>verification off</b>` :
+     k ? `<b>${k} intersecting pair${k === 1 ? "" : "s"}</b>, ${flagged} triangles in red` : `<b class="ok">no intersections</b>`);
+  $("stats").textContent = `${document.title.replace(/ - Mesh Verifier$/, "")}: ${comps.length} components (${withGeometry} with geometry), ${tris} triangles, ` +
+    (state.verifying ? `${k} intersecting pairs` : "verification off");
 }
 
 // ---------- edits ----------
@@ -569,7 +573,12 @@ $("redo").onclick = () => undoRedo("redo");
 $("resetSel").onclick = () => { if (selected >= 0) reset(selected, false); else message("select a component first", true); };
 $("resetAll").onclick = () => reset(undefined);
 $("frame").onclick = () => selected >= 0 ? frameSelection() : frame(sceneBox());
-$("wire").onchange = () => root.traverse(o => { if (o.userData.wire) o.visible = $("wire").checked; });
+$("verify").onchange = async () => {
+  const on = $("verify").checked;
+  if (on) message("verifying...");
+  try { applyState(await api("POST", "/api/verify", { on })); message(on ? "verification on" : "verification off"); } catch (err) { fail(err); }
+};
+$("wire").onchange =() => root.traverse(o => { if (o.userData.wire) o.visible = $("wire").checked; });
 
 // ---------- camera ----------
 function frame(box) {

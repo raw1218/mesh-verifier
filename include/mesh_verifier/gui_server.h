@@ -20,6 +20,8 @@
 //                                                                                        (influence.schema.json)
 //   POST /api/weights        {"joint": name} paints that joint's skin weights on the meshes as a view overlay,
 //                            blue (0) to red (1) as Blender does; {} stops. Returns the state (weights.schema.json)
+//   POST /api/verify         {"on": false} stops verifying after every change (no intersections in the view), for
+//                            speed; {"on": true} verifies again. Returns the state     (verify.schema.json)
 // Errors are HTTP 4xx with {"error": "..."} (error.schema.json).
 #pragma once
 
@@ -103,6 +105,7 @@ private:
     std::optional<double> influenceValue_;
     // The joint whose skin weights are painted (POST /api/weights).
     std::optional<size_t> weights_;
+    bool verify_ = true;  // verify after every change (POST /api/verify)
 
     nlohmann::json ControlsJson() const;
     // The view, with the influence layers when a control is chosen.

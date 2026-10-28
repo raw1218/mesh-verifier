@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Verify request",
+  "description": "Request body of POST /api/verify: turn the verification layer on or off. Off, edits and poses skip the intersection check (the view has no intersections) until it's turned on again, which verifies the scene as it is then.",
+  "type": "object",
+  "properties": {
+    "on": {"type": "boolean"}
+  },
+  "required": ["on"],
+  "additionalProperties": false
+}

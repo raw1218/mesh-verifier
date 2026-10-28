@@ -48,6 +48,7 @@ set(MESH_VERIFIER_SCHEMAS
     schema/weights.schema.json
     schema/rig.schema.json
     schema/rig-report.schema.json
+    schema/verify.schema.json
     schema/error.schema.json)
 mv_embed(${CMAKE_CURRENT_BINARY_DIR}/generated/schema_files.cpp SchemaFiles ${MESH_VERIFIER_SCHEMAS})
 mv_embed(${CMAKE_CURRENT_BINARY_DIR}/generated/page_files.cpp PageFiles src/server/gui_page.html)

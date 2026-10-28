@@ -77,6 +77,7 @@ are the definitive form; the examples here illustrate them.
 | `GET /api/state`, and every `POST` that changes the scene | `state.schema.json` |
 | `GET /api/scene`, `POST /api/load` | `scene.schema.json` |
 | `POST /api/reset` body | `reset.schema.json` |
+| `POST /api/verify` body | `verify.schema.json` |
 | `GET /api/controls` | `controls.schema.json` |
 | `POST /api/controls` body, and its result | `pose.schema.json`, `posed.schema.json` |
 | A rig file, and the `mesh-rig --json` report | `rig.schema.json`, `rig-report.schema.json` |
@@ -100,6 +101,7 @@ Blender add-on) uses the same API. Request and response bodies are JSON.
 | `POST /api/transform[?group=<id>]` | one edit, or a transforms document | the state |
 | `POST /api/reset` | `{"node": i, "subtree": bool}`, or `{}` for every component | the state |
 | `POST /api/undo`, `POST /api/redo` | | the state |
+| `POST /api/verify` | `{"on": false}` stops checking for intersections after each change (faster on big models); `{"on": true}` checks again | the state |
 | `POST /api/load?format=obj\|glb&name=<file name>[&up=y\|z]` | the model file's bytes | the scene |
 | `GET /api/controls` | | the rig's controls with their ranges and current values (none without a rig) |
 | `POST /api/controls` | `{"values": {"brow_raise_L": 0.5}}` | every mesh's new vertex positions and the state |

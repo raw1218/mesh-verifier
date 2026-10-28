@@ -64,6 +64,7 @@ std::string SchemaFileName(Schema schema) {
         case Schema::Weights: return "weights.schema.json";
         case Schema::Rig: return "rig.schema.json";
         case Schema::RigReport: return "rig-report.schema.json";
+        case Schema::Verify: return "verify.schema.json";
         case Schema::Error: return "error.schema.json";
     }
     throw std::logic_error("unknown schema");

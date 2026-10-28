@@ -240,7 +240,7 @@ View GuiApp::CurrentView() const {
 }
 
 void GuiApp::Reverify() {
-    report_ = VerifyScene(scene_);
+    report_ = verify_ ? VerifyScene(scene_) : VerificationReport{};
     ++revision_;
 }
 
@@ -265,6 +265,7 @@ json GuiApp::StateJson() const {
     return {{"revision", revision_},
             {"nodes", nodes},
             {"intersections", report_.intersections.size()},
+            {"verifying", verify_},
             {"canUndo", !undo_.empty()},
             {"canRedo", !redo_.empty()},
             {"view", ViewJson(CurrentView())}};
@@ -453,6 +454,12 @@ HttpResponse GuiApp::Api(const std::string& method, const std::string& path, con
         }
         influence_ = c;
         influenceValue_ = value;
+        return Json(StateJson());
+    }
+    if (path == "/api/verify") {
+        const json request = ReadBody(body, Schema::Verify);
+        verify_ = request.at("on").get<bool>();
+        Reverify();
         return Json(StateJson());
     }
     if (path == "/api/reset") {

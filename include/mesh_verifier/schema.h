@@ -25,6 +25,7 @@ enum class Schema {
     Weights,        // weights.schema.json
     Rig,            // rig.schema.json
     RigReport,      // rig-report.schema.json
+    Verify,         // verify.schema.json
     Error,          // error.schema.json (keep last)
 };
 

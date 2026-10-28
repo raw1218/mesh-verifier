@@ -19,11 +19,12 @@
         "additionalProperties": false
       }
     },
-    "intersections": {"type": "integer", "minimum": 0, "description": "The number of intersecting pairs."},
+    "intersections": {"type": "integer", "minimum": 0, "description": "The number of intersecting pairs (0 while verification is off)."},
+    "verifying": {"type": "boolean", "description": "Whether the scene is verified after every change (POST /api/verify)."},
     "canUndo": {"type": "boolean"},
     "canRedo": {"type": "boolean"},
     "view": {"$ref": "view.schema.json"}
   },
-  "required": ["revision", "nodes", "intersections", "canUndo", "canRedo", "view"],
+  "required": ["revision", "nodes", "intersections", "verifying", "canUndo", "canRedo", "view"],
   "additionalProperties": false
 }

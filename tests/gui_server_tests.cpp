@@ -88,6 +88,22 @@ TEST_CASE("edits through the API are verified again, and can be undone and reset
     for (size_t i = 0; i < app.CurrentScene().NodeCount(); ++i) CHECK_FALSE(app.CurrentScene().IsModified(i));
 }
 
+TEST_CASE("verification can be turned off, and on again") {
+    GuiApp app(LoadGLB(kFixtures / "hierarchy.glb"));
+    HttpResponse r = app.Handle("POST", "/api/verify", R"({"on":false})");
+    CHECK(Body(r, Schema::State)["verifying"] == false);
+    r = app.Handle("POST", "/api/transform", R"({"node":2,"space":"world","translation":[0.5,0,0]})");
+    CHECK(Intersections(r) == 0);  // (not checked while off)
+    CHECK(Body(r, Schema::State)["view"]["nodePairs"].empty());
+    CHECK(Body(app.Handle("GET", "/api/intersections", ""), Schema::Intersections)["intersections"].empty());
+
+    r = app.Handle("POST", "/api/verify", R"({"on":true})");  // verifies the scene as it is now
+    CHECK(Body(r, Schema::State)["verifying"] == true);
+    CHECK(Intersections(r) > 0);
+    CHECK(IsError(app.Handle("POST", "/api/verify", "{}")));
+    CHECK(IsError(app.Handle("POST", "/api/verify", R"({"on":"no"})")));
+}
+
 TEST_CASE("every state carries the view: the engine's highlight layers") {
     GuiApp app(LoadGLB(kFixtures / "hierarchy.glb"));
     const json before = Body(app.Handle("GET", "/api/view", ""), Schema::View);
